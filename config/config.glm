@@ -1,5 +1,5 @@
-#define STARTTIME="2020-01-01 00:00:00 PST"
-#define STOPTIME="2020-03-30 00:00:00 PST"
-#define TIMEZONE="PST+8PDT"
-#define TARIFF="fixed.tariff"
-//#define STARTRECORD="2020-01-01 00:00:00 PST"
+// Generated config.glm based on config/simulation_configuration.csv
+#define STARTTIME=2020-01-01 00:00:00 PST
+#define STOPTIME=2020-03-30 00:00:00 PST
+#define TIMEZONE=PST+8PDT
+#define TARIFF=tou.tariff

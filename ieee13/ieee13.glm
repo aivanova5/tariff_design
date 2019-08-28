@@ -6786,7 +6786,7 @@ object house {
 
 object billdump {
      runtime '2020-03-28 00:00:00';
-     filename "output/billdump/BillDump_IEEE_13_house_market.csv";
+     filename "output/billdump/BillDump_IEEE_13_${TARIFF}.csv";
      group "House_Meter";
 }
 
