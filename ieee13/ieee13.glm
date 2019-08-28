@@ -1,27 +1,36 @@
 //Input feeder information for IEEE 13 node with different cases.
-//Started on 10/21/09. This version created 15-Oct-2010 17:53:21.
-#include "default.glm"
-#ifexist "config.glm"
-#include "config.glm"
-#endif //config.glm
-clock {
-     timezone "${TIMEZONE}";
-     starttime "${STARTTIME}";
-     stoptime "${STOPTIME}";
-}
+//This version created 28-Aug-2019.
 
-#include "lights_schedule.glm";
-#include "water_and_setpoint_schedule.glm";
+#define HEATSET_PROB=0.01
+
+#include "config/default.glm"
+#ifexist "config/config.glm"
+#include "config/config.glm"
+#else 
+#print Warning using default configuration
+#endif //config.glm
+
+clock {
+  timezone "${TIMEZONE}";
+  starttime ${STARTTIME};
+  stoptime ${STOPTIME};
+}
+#include "ieee13/schedules/water_and_setpoint_schedule.glm"
 #define stylesheet=http://gridlab-d.svn.sourceforge.net/viewvc/gridlab-d/trunk/core/gridlabd-2_0
-#set minimum_timestep=60
+#set minimum_timestep=3600
 #set profiler=1
 #set relax_naming_rules=1
-#set randomseed=5
+#set randomseed=0
 
 module tape;
 module climate;
 module residential {
-  implicit_enduses NONE;
+  implicit_enduses REFRIGERATOR|LIGHTS|PLUGS|WATERHEATER|RANGE|DRYER|CLOTHESWASHER|FREEZER|MICROWAVE|DISHWASHER;
+  implicit_enduse_source EIA2015;
+}
+class house {
+  double initial_state_probability;
+  double initial_temperature_shift;
 }
 module powerflow {
   solver_method FBS;
@@ -45,7 +54,7 @@ object auction {
     capacity_reference_property power_out_real;
     object player {
         property capacity_reference_bid_price;
-        file ${TARIFF};
+        file input/tariff/${TARIFF};
         loop 366;
     };
     max_capacity_reference_bid_quantity 500000;
@@ -53,7 +62,7 @@ object auction {
 }
 object climate {
      name weather;
-     tmyfile ${WEATHER};
+     tmyfile "input/data/${WEATHER}";
      interpolate QUADRATIC;
 };
 
@@ -288,7 +297,7 @@ object node {
 object transformer {
      name substation_transformer;
      object recorder {
-          file IEEE_13_house_market_transformer_power.csv;
+          file "output/powerdump/IEEE_13_house_market_transformer_power.csv";
           interval 60;
           limit 1440;
           property power_in_A.real,power_in_A.imag,power_in_B.real,power_in_B.imag,power_in_C.real,power_in_C.imag,power_out_A.real,power_out_A.imag,power_out_B.real,power_out_B.imag,power_out_C.real,power_out_C.imag,power_losses_A.real,power_losses_A.imag;
@@ -632,9 +641,12 @@ object triplex_line {
 
 object triplex_meter {
        name tm_B_1_645;
+       bill_day 28;
        phases BS;
        nominal_voltage 120;
        groupid House_Meter;
+       bill_mode HOURLY;
+       power_market Market_1;
 }
 
 object house {
@@ -644,8 +656,13 @@ object house {
      schedule_skew 722;
      heating_system_type HEAT_PUMP;
      cooling_system_type HEAT_PUMP;
-       heating_setpoint heating3*1;
-
+     gas_enduses DRYER|RANGE;
+     heating_setpoint heating3*1; 
+#if HEATSET_PROB<${URAND}
+      thermostat_mode OFF;
+#else
+      thermostat_mode HEAT;
+#endif
      object controller {
            schedule_skew 722;
            market Market_1;
@@ -667,20 +684,10 @@ object house {
        };
 
      thermal_integrity_level 5;
-     air_temperature 70;
-     mass_temperature 70;
+     initial_temperature_shift random.uniform(-0.5,+0.5);
+     air_temperature ($heating_setpoint+$initial_temperature_shift); 
+     mass_temperature ($heating_setpoint); 
      cooling_COP 2.5;
-     object ZIPload {
-           base_power LIGHTS*0.97;
-           schedule_skew 722;
-           heatgain_fraction 0.9;
-           power_pf 1.000;
-           current_pf 1.000;
-           impedance_pf 1.000;
-           impedance_fraction 0.300000;
-           current_fraction 0.300000;
-           power_fraction 0.400000;
-     };
 }
 
 object triplex_line {
@@ -695,9 +702,12 @@ object triplex_line {
 
 object triplex_meter {
        name tm_B_2_645;
+       bill_day 28;
        phases BS;
        nominal_voltage 120;
        groupid House_Meter;
+       bill_mode HOURLY;
+       power_market Market_1;
 }
 
 object house {
@@ -708,7 +718,12 @@ object house {
      heating_system_type HEAT_PUMP;
      heating_COP 3.0;
      cooling_system_type HEAT_PUMP;
-
+     gas_enduses DRYER|RANGE;
+#if HEATSET_PROB<${URAND}
+      thermostat_mode OFF;
+#else
+      thermostat_mode HEAT;
+#endif
      object controller {
            schedule_skew 2406;
            market Market_1;
@@ -734,20 +749,10 @@ object house {
        };
 
      thermal_integrity_level 6;
-     air_temperature 70;
-     mass_temperature 70;
+          initial_temperature_shift random.uniform(-0.5,+0.5);
+     air_temperature ($heating_setpoint+$initial_temperature_shift); 
+     mass_temperature ($heating_setpoint); 
      cooling_COP 2.6;
-     object ZIPload {
-           base_power LIGHTS*1.29;
-           schedule_skew 2406;
-           heatgain_fraction 0.9;
-           power_pf 1.000;
-           current_pf 1.000;
-           impedance_pf 1.000;
-           impedance_fraction 0.300000;
-           current_fraction 0.300000;
-           power_fraction 0.400000;
-     };
      object waterheater {
           schedule_skew 2406;
           tank_volume 50;
@@ -786,9 +791,12 @@ object triplex_line {
 
 object triplex_meter {
        name tm_B_3_645;
+       bill_day 28;
        phases BS;
        nominal_voltage 120;
        groupid House_Meter;
+       bill_mode HOURLY;
+       power_market Market_1;
 }
 
 object house {
@@ -798,8 +806,13 @@ object house {
      schedule_skew 1870;
      heating_system_type HEAT_PUMP;
      cooling_system_type HEAT_PUMP;
+     gas_enduses DRYER|RANGE;
        heating_setpoint heating2*1;
-
+#if HEATSET_PROB<${URAND}
+      thermostat_mode OFF;
+#else
+      thermostat_mode HEAT;
+#endif
      object controller {
            schedule_skew 1870;
            market Market_1;
@@ -821,20 +834,10 @@ object house {
        };
 
      thermal_integrity_level 4;
-     air_temperature 70;
-     mass_temperature 70;
+          initial_temperature_shift random.uniform(-0.5,+0.5);
+     air_temperature ($heating_setpoint+$initial_temperature_shift); 
+     mass_temperature ($heating_setpoint); 
      cooling_COP 3.2;
-     object ZIPload {
-           base_power LIGHTS*0.99;
-           schedule_skew 1870;
-           heatgain_fraction 0.9;
-           power_pf 1.000;
-           current_pf 1.000;
-           impedance_pf 1.000;
-           impedance_fraction 0.300000;
-           current_fraction 0.300000;
-           power_fraction 0.400000;
-     };
 }
 
 object transformer {
@@ -872,9 +875,12 @@ object triplex_line {
 
 object triplex_meter {
        name tm_B_1_646;
+       bill_day 28;
        phases BS;
        nominal_voltage 120;
        groupid House_Meter;
+       bill_mode HOURLY;
+       power_market Market_1;
 }
 
 object house {
@@ -885,7 +891,12 @@ object house {
      heating_system_type HEAT_PUMP;
      heating_COP 3.5;
      cooling_system_type HEAT_PUMP;
-
+     gas_enduses DRYER|RANGE;
+#if HEATSET_PROB<${URAND}
+      thermostat_mode OFF;
+#else
+      thermostat_mode HEAT;
+#endif
      object controller {
            schedule_skew 2138;
            market Market_1;
@@ -911,20 +922,10 @@ object house {
        };
 
      thermal_integrity_level 5;
-     air_temperature 70;
-     mass_temperature 70;
+          initial_temperature_shift random.uniform(-0.5,+0.5);
+     air_temperature ($heating_setpoint+$initial_temperature_shift); 
+     mass_temperature ($heating_setpoint); 
      cooling_COP 3.7;
-     object ZIPload {
-           base_power LIGHTS*1.51;
-           schedule_skew 2138;
-           heatgain_fraction 0.9;
-           power_pf 1.000;
-           current_pf 1.000;
-           impedance_pf 1.000;
-           impedance_fraction 0.300000;
-           current_fraction 0.300000;
-           power_fraction 0.400000;
-     };
      object waterheater {
           schedule_skew 2138;
           tank_volume 50;
@@ -963,9 +964,12 @@ object triplex_line {
 
 object triplex_meter {
        name tm_B_2_646;
+       bill_day 28;
        phases BS;
        nominal_voltage 120;
        groupid House_Meter;
+       bill_mode HOURLY;
+       power_market Market_1;
 }
 
 object house {
@@ -976,7 +980,12 @@ object house {
      heating_system_type HEAT_PUMP;
      heating_COP 3.0;
      cooling_system_type HEAT_PUMP;
-
+     gas_enduses DRYER|RANGE;
+#if HEATSET_PROB<${URAND}
+      thermostat_mode OFF;
+#else
+      thermostat_mode HEAT;
+#endif
      object controller {
            schedule_skew 185;
            market Market_1;
@@ -1002,20 +1011,10 @@ object house {
        };
 
      thermal_integrity_level 5;
-     air_temperature 70;
-     mass_temperature 70;
+          initial_temperature_shift random.uniform(-0.5,+0.5);
+     air_temperature ($heating_setpoint+$initial_temperature_shift); 
+     mass_temperature ($heating_setpoint); 
      cooling_COP 3.4;
-     object ZIPload {
-           base_power LIGHTS*0.80;
-           schedule_skew 185;
-           heatgain_fraction 0.9;
-           power_pf 1.000;
-           current_pf 1.000;
-           impedance_pf 1.000;
-           impedance_fraction 0.300000;
-           current_fraction 0.300000;
-           power_fraction 0.400000;
-     };
      object waterheater {
           schedule_skew 185;
           tank_volume 50;
@@ -1077,9 +1076,12 @@ object triplex_line {
 
 object triplex_meter {
        name tm_A_1_652;
+       bill_day 28;
        phases AS;
        nominal_voltage 120;
        groupid House_Meter;
+       bill_mode HOURLY;
+       power_market Market_1;
 }
 
 object house {
@@ -1090,7 +1092,12 @@ object house {
      heating_system_type HEAT_PUMP;
      heating_COP 2.7;
      cooling_system_type HEAT_PUMP;
-
+     gas_enduses DRYER|RANGE;
+#if HEATSET_PROB<${URAND}
+      thermostat_mode OFF;
+#else
+      thermostat_mode HEAT;
+#endif
      object controller {
            schedule_skew 2754;
            market Market_1;
@@ -1116,20 +1123,10 @@ object house {
        };
 
      thermal_integrity_level 5;
-     air_temperature 70;
-     mass_temperature 70;
+          initial_temperature_shift random.uniform(-0.5,+0.5);
+     air_temperature ($heating_setpoint+$initial_temperature_shift); 
+     mass_temperature ($heating_setpoint); 
      cooling_COP 2.7;
-     object ZIPload {
-           base_power LIGHTS*1.11;
-           schedule_skew 2754;
-           heatgain_fraction 0.9;
-           power_pf 1.000;
-           current_pf 1.000;
-           impedance_pf 1.000;
-           impedance_fraction 0.300000;
-           current_fraction 0.300000;
-           power_fraction 0.400000;
-     };
      object waterheater {
           schedule_skew 2754;
           tank_volume 50;
@@ -1168,9 +1165,12 @@ object triplex_line {
 
 object triplex_meter {
        name tm_A_2_652;
+       bill_day 28;
        phases AS;
        nominal_voltage 120;
        groupid House_Meter;
+       bill_mode HOURLY;
+       power_market Market_1;
 }
 
 object house {
@@ -1181,7 +1181,12 @@ object house {
      heating_system_type HEAT_PUMP;
      heating_COP 2.7;
      cooling_system_type HEAT_PUMP;
-
+     gas_enduses DRYER|RANGE;
+#if HEATSET_PROB<${URAND}
+      thermostat_mode OFF;
+#else
+      thermostat_mode HEAT;
+#endif
      object controller {
            schedule_skew 238;
            market Market_1;
@@ -1207,20 +1212,10 @@ object house {
        };
 
      thermal_integrity_level 4;
-     air_temperature 70;
-     mass_temperature 70;
+          initial_temperature_shift random.uniform(-0.5,+0.5);
+     air_temperature ($heating_setpoint+$initial_temperature_shift); 
+     mass_temperature ($heating_setpoint); 
      cooling_COP 2.9;
-     object ZIPload {
-           base_power LIGHTS*0.76;
-           schedule_skew 238;
-           heatgain_fraction 0.9;
-           power_pf 1.000;
-           current_pf 1.000;
-           impedance_pf 1.000;
-           impedance_fraction 0.300000;
-           current_fraction 0.300000;
-           power_fraction 0.400000;
-     };
      object waterheater {
           schedule_skew 238;
           tank_volume 50;
@@ -1259,9 +1254,12 @@ object triplex_line {
 
 object triplex_meter {
        name tm_A_3_652;
+       bill_day 28;
        phases AS;
        nominal_voltage 120;
        groupid House_Meter;
+       bill_mode HOURLY;
+       power_market Market_1;
 }
 
 object house {
@@ -1271,8 +1269,13 @@ object house {
      schedule_skew 534;
      heating_system_type HEAT_PUMP;
      cooling_system_type HEAT_PUMP;
+     gas_enduses DRYER|RANGE;
        heating_setpoint heating1*1;
-
+#if HEATSET_PROB<${URAND}
+      thermostat_mode OFF;
+#else
+      thermostat_mode HEAT;
+#endif
      object controller {
            schedule_skew 534;
            market Market_1;
@@ -1294,20 +1297,10 @@ object house {
        };
 
      thermal_integrity_level 4;
-     air_temperature 70;
-     mass_temperature 70;
+          initial_temperature_shift random.uniform(-0.5,+0.5);
+     air_temperature ($heating_setpoint+$initial_temperature_shift); 
+     mass_temperature ($heating_setpoint); 
      cooling_COP 3.8;
-     object ZIPload {
-           base_power LIGHTS*1.02;
-           schedule_skew 534;
-           heatgain_fraction 0.9;
-           power_pf 1.000;
-           current_pf 1.000;
-           impedance_pf 1.000;
-           impedance_fraction 0.300000;
-           current_fraction 0.300000;
-           power_fraction 0.400000;
-     };
 }
 
 object triplex_line {
@@ -1322,9 +1315,12 @@ object triplex_line {
 
 object triplex_meter {
        name tm_A_4_652;
+       bill_day 28;
        phases AS;
        nominal_voltage 120;
        groupid House_Meter;
+       bill_mode HOURLY;
+       power_market Market_1;
 }
 
 object house {
@@ -1334,8 +1330,13 @@ object house {
      schedule_skew -437;
      heating_system_type HEAT_PUMP;
      cooling_system_type HEAT_PUMP;
+     gas_enduses DRYER|RANGE;
        heating_setpoint heating8*1;
-
+#if HEATSET_PROB<${URAND}
+      thermostat_mode OFF;
+#else
+      thermostat_mode HEAT;
+#endif
      object controller {
            schedule_skew -437;
            market Market_1;
@@ -1357,20 +1358,10 @@ object house {
        };
 
      thermal_integrity_level 3;
-     air_temperature 70;
-     mass_temperature 70;
+          initial_temperature_shift random.uniform(-0.5,+0.5);
+     air_temperature ($heating_setpoint+$initial_temperature_shift); 
+     mass_temperature ($heating_setpoint); 
      cooling_COP 3.1;
-     object ZIPload {
-           base_power LIGHTS*0.87;
-           schedule_skew -437;
-           heatgain_fraction 0.9;
-           power_pf 1.000;
-           current_pf 1.000;
-           impedance_pf 1.000;
-           impedance_fraction 0.300000;
-           current_fraction 0.300000;
-           power_fraction 0.400000;
-     };
 }
 
 object triplex_line {
@@ -1385,9 +1376,12 @@ object triplex_line {
 
 object triplex_meter {
        name tm_A_5_652;
+       bill_day 28;
        phases AS;
        nominal_voltage 120;
        groupid House_Meter;
+       bill_mode HOURLY;
+       power_market Market_1;
 }
 
 object house {
@@ -1398,7 +1392,12 @@ object house {
      heating_system_type HEAT_PUMP;
      heating_COP 2.5;
      cooling_system_type HEAT_PUMP;
-
+     gas_enduses DRYER|RANGE;
+#if HEATSET_PROB<${URAND}
+      thermostat_mode OFF;
+#else
+      thermostat_mode HEAT;
+#endif
      object controller {
            schedule_skew -395;
            market Market_1;
@@ -1424,20 +1423,10 @@ object house {
        };
 
      thermal_integrity_level 3;
-     air_temperature 70;
-     mass_temperature 70;
+          initial_temperature_shift random.uniform(-0.5,+0.5);
+     air_temperature ($heating_setpoint+$initial_temperature_shift); 
+     mass_temperature ($heating_setpoint); 
      cooling_COP 2.8;
-     object ZIPload {
-           base_power LIGHTS*1.34;
-           schedule_skew -395;
-           heatgain_fraction 0.9;
-           power_pf 1.000;
-           current_pf 1.000;
-           impedance_pf 1.000;
-           impedance_fraction 0.300000;
-           current_fraction 0.300000;
-           power_fraction 0.400000;
-     };
      object waterheater {
           schedule_skew -395;
           tank_volume 50;
@@ -1499,9 +1488,12 @@ object triplex_line {
 
 object triplex_meter {
        name tm_A_1_671;
+       bill_day 28;
        phases AS;
        nominal_voltage 120;
        groupid House_Meter;
+       bill_mode HOURLY;
+       power_market Market_1;
 }
 
 object house {
@@ -1512,7 +1504,12 @@ object house {
      heating_system_type HEAT_PUMP;
      heating_COP 2.1;
      cooling_system_type HEAT_PUMP;
-
+     gas_enduses DRYER|RANGE;
+#if HEATSET_PROB<${URAND}
+      thermostat_mode OFF;
+#else
+      thermostat_mode HEAT;
+#endif
      object controller {
            schedule_skew 577;
            market Market_1;
@@ -1538,20 +1535,10 @@ object house {
        };
 
      thermal_integrity_level 5;
-     air_temperature 70;
-     mass_temperature 70;
+          initial_temperature_shift random.uniform(-0.5,+0.5);
+     air_temperature ($heating_setpoint+$initial_temperature_shift); 
+     mass_temperature ($heating_setpoint); 
      cooling_COP 2.9;
-     object ZIPload {
-           base_power LIGHTS*1.22;
-           schedule_skew 577;
-           heatgain_fraction 0.9;
-           power_pf 1.000;
-           current_pf 1.000;
-           impedance_pf 1.000;
-           impedance_fraction 0.300000;
-           current_fraction 0.300000;
-           power_fraction 0.400000;
-     };
      object waterheater {
           schedule_skew 577;
           tank_volume 50;
@@ -1590,9 +1577,12 @@ object triplex_line {
 
 object triplex_meter {
        name tm_A_2_671;
+       bill_day 28;
        phases AS;
        nominal_voltage 120;
        groupid House_Meter;
+       bill_mode HOURLY;
+       power_market Market_1;
 }
 
 object house {
@@ -1603,7 +1593,12 @@ object house {
      heating_system_type HEAT_PUMP;
      heating_COP 2.1;
      cooling_system_type HEAT_PUMP;
-
+     gas_enduses DRYER|RANGE;
+#if HEATSET_PROB<${URAND}
+      thermostat_mode OFF;
+#else
+      thermostat_mode HEAT;
+#endif
      object controller {
            schedule_skew 2037;
            market Market_1;
@@ -1629,20 +1624,10 @@ object house {
        };
 
      thermal_integrity_level 6;
-     air_temperature 70;
-     mass_temperature 70;
+          initial_temperature_shift random.uniform(-0.5,+0.5);
+     air_temperature ($heating_setpoint+$initial_temperature_shift); 
+     mass_temperature ($heating_setpoint); 
      cooling_COP 3.3;
-     object ZIPload {
-           base_power LIGHTS*1.65;
-           schedule_skew 2037;
-           heatgain_fraction 0.9;
-           power_pf 1.000;
-           current_pf 1.000;
-           impedance_pf 1.000;
-           impedance_fraction 0.300000;
-           current_fraction 0.300000;
-           power_fraction 0.400000;
-     };
      object waterheater {
           schedule_skew 2037;
           tank_volume 50;
@@ -1681,9 +1666,12 @@ object triplex_line {
 
 object triplex_meter {
        name tm_A_3_671;
+       bill_day 28;
        phases AS;
        nominal_voltage 120;
        groupid House_Meter;
+       bill_mode HOURLY;
+       power_market Market_1;
 }
 
 object house {
@@ -1693,8 +1681,13 @@ object house {
      schedule_skew -1566;
      heating_system_type HEAT_PUMP;
      cooling_system_type HEAT_PUMP;
+     gas_enduses DRYER|RANGE;
        heating_setpoint heating4*1;
-
+#if HEATSET_PROB<${URAND}
+      thermostat_mode OFF;
+#else
+      thermostat_mode HEAT;
+#endif
      object controller {
            schedule_skew -1566;
            market Market_1;
@@ -1716,20 +1709,10 @@ object house {
        };
 
      thermal_integrity_level 6;
-     air_temperature 70;
-     mass_temperature 70;
+          initial_temperature_shift random.uniform(-0.5,+0.5);
+     air_temperature ($heating_setpoint+$initial_temperature_shift); 
+     mass_temperature ($heating_setpoint); 
      cooling_COP 3.6;
-     object ZIPload {
-           base_power LIGHTS*1.07;
-           schedule_skew -1566;
-           heatgain_fraction 0.9;
-           power_pf 1.000;
-           current_pf 1.000;
-           impedance_pf 1.000;
-           impedance_fraction 0.300000;
-           current_fraction 0.300000;
-           power_fraction 0.400000;
-     };
 }
 
 object triplex_line {
@@ -1744,9 +1727,12 @@ object triplex_line {
 
 object triplex_meter {
        name tm_A_4_671;
+       bill_day 28;
        phases AS;
        nominal_voltage 120;
        groupid House_Meter;
+       bill_mode HOURLY;
+       power_market Market_1;
 }
 
 object house {
@@ -1757,7 +1743,12 @@ object house {
      heating_system_type HEAT_PUMP;
      heating_COP 3.4;
      cooling_system_type HEAT_PUMP;
-
+     gas_enduses DRYER|RANGE;
+#if HEATSET_PROB<${URAND}
+      thermostat_mode OFF;
+#else
+      thermostat_mode HEAT;
+#endif
      object controller {
            schedule_skew 1100;
            market Market_1;
@@ -1783,20 +1774,10 @@ object house {
        };
 
      thermal_integrity_level 5;
-     air_temperature 70;
-     mass_temperature 70;
+          initial_temperature_shift random.uniform(-0.5,+0.5);
+     air_temperature ($heating_setpoint+$initial_temperature_shift); 
+     mass_temperature ($heating_setpoint); 
      cooling_COP 2.6;
-     object ZIPload {
-           base_power LIGHTS*0.95;
-           schedule_skew 1100;
-           heatgain_fraction 0.9;
-           power_pf 1.000;
-           current_pf 1.000;
-           impedance_pf 1.000;
-           impedance_fraction 0.300000;
-           current_fraction 0.300000;
-           power_fraction 0.400000;
-     };
      object waterheater {
           schedule_skew 1100;
           tank_volume 50;
@@ -1835,9 +1816,12 @@ object triplex_line {
 
 object triplex_meter {
        name tm_A_5_671;
+       bill_day 28;
        phases AS;
        nominal_voltage 120;
        groupid House_Meter;
+       bill_mode HOURLY;
+       power_market Market_1;
 }
 
 object house {
@@ -1848,7 +1832,12 @@ object house {
      heating_system_type HEAT_PUMP;
      heating_COP 3.2;
      cooling_system_type HEAT_PUMP;
-
+     gas_enduses DRYER|RANGE;
+#if HEATSET_PROB<${URAND}
+      thermostat_mode OFF;
+#else
+      thermostat_mode HEAT;
+#endif
      object controller {
            schedule_skew 3355;
            market Market_1;
@@ -1874,20 +1863,10 @@ object house {
        };
 
      thermal_integrity_level 5;
-     air_temperature 70;
-     mass_temperature 70;
+          initial_temperature_shift random.uniform(-0.5,+0.5);
+     air_temperature ($heating_setpoint+$initial_temperature_shift); 
+     mass_temperature ($heating_setpoint); 
      cooling_COP 3.9;
-     object ZIPload {
-           base_power LIGHTS*1.04;
-           schedule_skew 3355;
-           heatgain_fraction 0.9;
-           power_pf 1.000;
-           current_pf 1.000;
-           impedance_pf 1.000;
-           impedance_fraction 0.300000;
-           current_fraction 0.300000;
-           power_fraction 0.400000;
-     };
      object waterheater {
           schedule_skew 3355;
           tank_volume 50;
@@ -1926,9 +1905,12 @@ object triplex_line {
 
 object triplex_meter {
        name tm_A_6_671;
+       bill_day 28;
        phases AS;
        nominal_voltage 120;
        groupid House_Meter;
+       bill_mode HOURLY;
+       power_market Market_1;
 }
 
 object house {
@@ -1939,7 +1921,12 @@ object house {
      heating_system_type HEAT_PUMP;
      heating_COP 2.6;
      cooling_system_type HEAT_PUMP;
-
+     gas_enduses DRYER|RANGE;
+#if HEATSET_PROB<${URAND}
+      thermostat_mode OFF;
+#else
+      thermostat_mode HEAT;
+#endif
      object controller {
            schedule_skew -957;
            market Market_1;
@@ -1965,20 +1952,10 @@ object house {
        };
 
      thermal_integrity_level 4;
-     air_temperature 70;
-     mass_temperature 70;
+          initial_temperature_shift random.uniform(-0.5,+0.5);
+     air_temperature ($heating_setpoint+$initial_temperature_shift); 
+     mass_temperature ($heating_setpoint); 
      cooling_COP 3.5;
-     object ZIPload {
-           base_power LIGHTS*0.82;
-           schedule_skew -957;
-           heatgain_fraction 0.9;
-           power_pf 1.000;
-           current_pf 1.000;
-           impedance_pf 1.000;
-           impedance_fraction 0.300000;
-           current_fraction 0.300000;
-           power_fraction 0.400000;
-     };
      object waterheater {
           schedule_skew -957;
           tank_volume 50;
@@ -2017,9 +1994,12 @@ object triplex_line {
 
 object triplex_meter {
        name tm_A_7_671;
+       bill_day 28;
        phases AS;
        nominal_voltage 120;
        groupid House_Meter;
+       bill_mode HOURLY;
+       power_market Market_1;
 }
 
 object house {
@@ -2030,7 +2010,12 @@ object house {
      heating_system_type HEAT_PUMP;
      heating_COP 2.9;
      cooling_system_type HEAT_PUMP;
-
+     gas_enduses DRYER|RANGE;
+#if HEATSET_PROB<${URAND}
+      thermostat_mode OFF;
+#else
+      thermostat_mode HEAT;
+#endif
      object controller {
            schedule_skew -1391;
            market Market_1;
@@ -2056,20 +2041,10 @@ object house {
        };
 
      thermal_integrity_level 6;
-     air_temperature 70;
-     mass_temperature 70;
+          initial_temperature_shift random.uniform(-0.5,+0.5);
+     air_temperature ($heating_setpoint+$initial_temperature_shift); 
+     mass_temperature ($heating_setpoint); 
      cooling_COP 3.7;
-     object ZIPload {
-           base_power LIGHTS*1.55;
-           schedule_skew -1391;
-           heatgain_fraction 0.9;
-           power_pf 1.000;
-           current_pf 1.000;
-           impedance_pf 1.000;
-           impedance_fraction 0.300000;
-           current_fraction 0.300000;
-           power_fraction 0.400000;
-     };
      object waterheater {
           schedule_skew -1391;
           tank_volume 50;
@@ -2131,9 +2106,12 @@ object triplex_line {
 
 object triplex_meter {
        name tm_B_1_671;
+       bill_day 28;
        phases BS;
        nominal_voltage 120;
        groupid House_Meter;
+       bill_mode HOURLY;
+       power_market Market_1;
 }
 
 object house {
@@ -2144,7 +2122,12 @@ object house {
      heating_system_type HEAT_PUMP;
      heating_COP 2.0;
      cooling_system_type HEAT_PUMP;
-
+     gas_enduses DRYER|RANGE;
+#if HEATSET_PROB<${URAND}
+      thermostat_mode OFF;
+#else
+      thermostat_mode HEAT;
+#endif
      object controller {
            schedule_skew 2214;
            market Market_1;
@@ -2170,20 +2153,10 @@ object house {
        };
 
      thermal_integrity_level 3;
-     air_temperature 70;
-     mass_temperature 70;
+          initial_temperature_shift random.uniform(-0.5,+0.5);
+     air_temperature ($heating_setpoint+$initial_temperature_shift); 
+     mass_temperature ($heating_setpoint); 
      cooling_COP 2.5;
-     object ZIPload {
-           base_power LIGHTS*1.02;
-           schedule_skew 2214;
-           heatgain_fraction 0.9;
-           power_pf 1.000;
-           current_pf 1.000;
-           impedance_pf 1.000;
-           impedance_fraction 0.300000;
-           current_fraction 0.300000;
-           power_fraction 0.400000;
-     };
      object waterheater {
           schedule_skew 2214;
           tank_volume 50;
@@ -2222,9 +2195,12 @@ object triplex_line {
 
 object triplex_meter {
        name tm_B_2_671;
+       bill_day 28;
        phases BS;
        nominal_voltage 120;
        groupid House_Meter;
+       bill_mode HOURLY;
+       power_market Market_1;
 }
 
 object house {
@@ -2235,7 +2211,12 @@ object house {
      heating_system_type HEAT_PUMP;
      heating_COP 2.9;
      cooling_system_type HEAT_PUMP;
-
+     gas_enduses DRYER|RANGE;
+#if HEATSET_PROB<${URAND}
+      thermostat_mode OFF;
+#else
+      thermostat_mode HEAT;
+#endif
      object controller {
            schedule_skew -3393;
            market Market_1;
@@ -2261,20 +2242,10 @@ object house {
        };
 
      thermal_integrity_level 4;
-     air_temperature 70;
-     mass_temperature 70;
+          initial_temperature_shift random.uniform(-0.5,+0.5);
+     air_temperature ($heating_setpoint+$initial_temperature_shift); 
+     mass_temperature ($heating_setpoint); 
      cooling_COP 3.1;
-     object ZIPload {
-           base_power LIGHTS*1.17;
-           schedule_skew -3393;
-           heatgain_fraction 0.9;
-           power_pf 1.000;
-           current_pf 1.000;
-           impedance_pf 1.000;
-           impedance_fraction 0.300000;
-           current_fraction 0.300000;
-           power_fraction 0.400000;
-     };
      object waterheater {
           schedule_skew -3393;
           tank_volume 50;
@@ -2313,9 +2284,12 @@ object triplex_line {
 
 object triplex_meter {
        name tm_B_3_671;
+       bill_day 28;
        phases BS;
        nominal_voltage 120;
        groupid House_Meter;
+       bill_mode HOURLY;
+       power_market Market_1;
 }
 
 object house {
@@ -2326,7 +2300,12 @@ object house {
      heating_system_type HEAT_PUMP;
      heating_COP 2.5;
      cooling_system_type HEAT_PUMP;
-
+     gas_enduses DRYER|RANGE;
+#if HEATSET_PROB<${URAND}
+      thermostat_mode OFF;
+#else
+      thermostat_mode HEAT;
+#endif
      object controller {
            schedule_skew -2173;
            market Market_1;
@@ -2352,20 +2331,10 @@ object house {
        };
 
      thermal_integrity_level 4;
-     air_temperature 70;
-     mass_temperature 70;
+          initial_temperature_shift random.uniform(-0.5,+0.5);
+     air_temperature ($heating_setpoint+$initial_temperature_shift); 
+     mass_temperature ($heating_setpoint); 
      cooling_COP 3.3;
-     object ZIPload {
-           base_power LIGHTS*1.62;
-           schedule_skew -2173;
-           heatgain_fraction 0.9;
-           power_pf 1.000;
-           current_pf 1.000;
-           impedance_pf 1.000;
-           impedance_fraction 0.300000;
-           current_fraction 0.300000;
-           power_fraction 0.400000;
-     };
      object waterheater {
           schedule_skew -2173;
           tank_volume 50;
@@ -2404,9 +2373,12 @@ object triplex_line {
 
 object triplex_meter {
        name tm_B_4_671;
+       bill_day 28;
        phases BS;
        nominal_voltage 120;
        groupid House_Meter;
+       bill_mode HOURLY;
+       power_market Market_1;
 }
 
 object house {
@@ -2416,8 +2388,13 @@ object house {
      schedule_skew 1965;
      heating_system_type HEAT_PUMP;
      cooling_system_type HEAT_PUMP;
+     gas_enduses DRYER|RANGE;
        heating_setpoint heating4*1;
-
+#if HEATSET_PROB<${URAND}
+      thermostat_mode OFF;
+#else
+      thermostat_mode HEAT;
+#endif
      object controller {
            schedule_skew 1965;
            market Market_1;
@@ -2439,20 +2416,10 @@ object house {
        };
 
      thermal_integrity_level 4;
-     air_temperature 70;
-     mass_temperature 70;
+          initial_temperature_shift random.uniform(-0.5,+0.5);
+     air_temperature ($heating_setpoint+$initial_temperature_shift); 
+     mass_temperature ($heating_setpoint); 
      cooling_COP 2.9;
-     object ZIPload {
-           base_power LIGHTS*0.75;
-           schedule_skew 1965;
-           heatgain_fraction 0.9;
-           power_pf 1.000;
-           current_pf 1.000;
-           impedance_pf 1.000;
-           impedance_fraction 0.300000;
-           current_fraction 0.300000;
-           power_fraction 0.400000;
-     };
 }
 
 object triplex_line {
@@ -2467,9 +2434,12 @@ object triplex_line {
 
 object triplex_meter {
        name tm_B_5_671;
+       bill_day 28;
        phases BS;
        nominal_voltage 120;
        groupid House_Meter;
+       bill_mode HOURLY;
+       power_market Market_1;
 }
 
 object house {
@@ -2480,7 +2450,12 @@ object house {
      heating_system_type HEAT_PUMP;
      heating_COP 2.1;
      cooling_system_type HEAT_PUMP;
-
+     gas_enduses DRYER|RANGE;
+#if HEATSET_PROB<${URAND}
+      thermostat_mode OFF;
+#else
+      thermostat_mode HEAT;
+#endif
      object controller {
            schedule_skew 1793;
            market Market_1;
@@ -2506,20 +2481,10 @@ object house {
        };
 
      thermal_integrity_level 6;
-     air_temperature 70;
-     mass_temperature 70;
+          initial_temperature_shift random.uniform(-0.5,+0.5);
+     air_temperature ($heating_setpoint+$initial_temperature_shift); 
+     mass_temperature ($heating_setpoint); 
      cooling_COP 3.4;
-     object ZIPload {
-           base_power LIGHTS*1.05;
-           schedule_skew 1793;
-           heatgain_fraction 0.9;
-           power_pf 1.000;
-           current_pf 1.000;
-           impedance_pf 1.000;
-           impedance_fraction 0.300000;
-           current_fraction 0.300000;
-           power_fraction 0.400000;
-     };
      object waterheater {
           schedule_skew 1793;
           tank_volume 50;
@@ -2558,9 +2523,12 @@ object triplex_line {
 
 object triplex_meter {
        name tm_B_6_671;
+       bill_day 28;
        phases BS;
        nominal_voltage 120;
        groupid House_Meter;
+       bill_mode HOURLY;
+       power_market Market_1;
 }
 
 object house {
@@ -2571,7 +2539,12 @@ object house {
      heating_system_type HEAT_PUMP;
      heating_COP 2.3;
      cooling_system_type HEAT_PUMP;
-
+     gas_enduses DRYER|RANGE;
+#if HEATSET_PROB<${URAND}
+      thermostat_mode OFF;
+#else
+      thermostat_mode HEAT;
+#endif
      object controller {
            schedule_skew 739;
            market Market_1;
@@ -2597,20 +2570,10 @@ object house {
        };
 
      thermal_integrity_level 5;
-     air_temperature 70;
-     mass_temperature 70;
+          initial_temperature_shift random.uniform(-0.5,+0.5);
+     air_temperature ($heating_setpoint+$initial_temperature_shift); 
+     mass_temperature ($heating_setpoint); 
      cooling_COP 3.8;
-     object ZIPload {
-           base_power LIGHTS*0.67;
-           schedule_skew 739;
-           heatgain_fraction 0.9;
-           power_pf 1.000;
-           current_pf 1.000;
-           impedance_pf 1.000;
-           impedance_fraction 0.300000;
-           current_fraction 0.300000;
-           power_fraction 0.400000;
-     };
      object waterheater {
           schedule_skew 739;
           tank_volume 50;
@@ -2672,9 +2635,12 @@ object triplex_line {
 
 object triplex_meter {
        name tm_C_1_671;
+       bill_day 28;
        phases CS;
        nominal_voltage 120;
        groupid House_Meter;
+       bill_mode HOURLY;
+       power_market Market_1;
 }
 
 object house {
@@ -2684,8 +2650,13 @@ object house {
      schedule_skew -3600;
      heating_system_type HEAT_PUMP;
      cooling_system_type HEAT_PUMP;
+     gas_enduses DRYER|RANGE;
        heating_setpoint heating3*1;
-
+#if HEATSET_PROB<${URAND}
+      thermostat_mode OFF;
+#else
+      thermostat_mode HEAT;
+#endif
      object controller {
            schedule_skew -3600;
            market Market_1;
@@ -2707,20 +2678,10 @@ object house {
        };
 
      thermal_integrity_level 3;
-     air_temperature 70;
-     mass_temperature 70;
+          initial_temperature_shift random.uniform(-0.5,+0.5);
+     air_temperature ($heating_setpoint+$initial_temperature_shift); 
+     mass_temperature ($heating_setpoint); 
      cooling_COP 3.6;
-     object ZIPload {
-           base_power LIGHTS*1.51;
-           schedule_skew -3600;
-           heatgain_fraction 0.9;
-           power_pf 1.000;
-           current_pf 1.000;
-           impedance_pf 1.000;
-           impedance_fraction 0.300000;
-           current_fraction 0.300000;
-           power_fraction 0.400000;
-     };
 }
 
 object triplex_line {
@@ -2735,9 +2696,12 @@ object triplex_line {
 
 object triplex_meter {
        name tm_C_2_671;
+       bill_day 28;
        phases CS;
        nominal_voltage 120;
        groupid House_Meter;
+       bill_mode HOURLY;
+       power_market Market_1;
 }
 
 object house {
@@ -2747,8 +2711,13 @@ object house {
      schedule_skew -748;
      heating_system_type HEAT_PUMP;
      cooling_system_type HEAT_PUMP;
+     gas_enduses DRYER|RANGE;
        heating_setpoint heating4*1;
-
+#if HEATSET_PROB<${URAND}
+      thermostat_mode OFF;
+#else
+      thermostat_mode HEAT;
+#endif
      object controller {
            schedule_skew -748;
            market Market_1;
@@ -2770,20 +2739,10 @@ object house {
        };
 
      thermal_integrity_level 4;
-     air_temperature 70;
-     mass_temperature 70;
+          initial_temperature_shift random.uniform(-0.5,+0.5);
+     air_temperature ($heating_setpoint+$initial_temperature_shift); 
+     mass_temperature ($heating_setpoint); 
      cooling_COP 3.1;
-     object ZIPload {
-           base_power LIGHTS*1.30;
-           schedule_skew -748;
-           heatgain_fraction 0.9;
-           power_pf 1.000;
-           current_pf 1.000;
-           impedance_pf 1.000;
-           impedance_fraction 0.300000;
-           current_fraction 0.300000;
-           power_fraction 0.400000;
-     };
 }
 
 object triplex_line {
@@ -2798,9 +2757,12 @@ object triplex_line {
 
 object triplex_meter {
        name tm_C_3_671;
+       bill_day 28;
        phases CS;
        nominal_voltage 120;
        groupid House_Meter;
+       bill_mode HOURLY;
+       power_market Market_1;
 }
 
 object house {
@@ -2811,7 +2773,12 @@ object house {
      heating_system_type HEAT_PUMP;
      heating_COP 3.1;
      cooling_system_type HEAT_PUMP;
-
+     gas_enduses DRYER|RANGE;
+#if HEATSET_PROB<${URAND}
+      thermostat_mode OFF;
+#else
+      thermostat_mode HEAT;
+#endif
      object controller {
            schedule_skew -1102;
            market Market_1;
@@ -2837,20 +2804,10 @@ object house {
        };
 
      thermal_integrity_level 5;
-     air_temperature 70;
-     mass_temperature 70;
+          initial_temperature_shift random.uniform(-0.5,+0.5);
+     air_temperature ($heating_setpoint+$initial_temperature_shift); 
+     mass_temperature ($heating_setpoint); 
      cooling_COP 3.2;
-     object ZIPload {
-           base_power LIGHTS*1.70;
-           schedule_skew -1102;
-           heatgain_fraction 0.9;
-           power_pf 1.000;
-           current_pf 1.000;
-           impedance_pf 1.000;
-           impedance_fraction 0.300000;
-           current_fraction 0.300000;
-           power_fraction 0.400000;
-     };
      object waterheater {
           schedule_skew -1102;
           tank_volume 50;
@@ -2889,9 +2846,12 @@ object triplex_line {
 
 object triplex_meter {
        name tm_C_4_671;
+       bill_day 28;
        phases CS;
        nominal_voltage 120;
        groupid House_Meter;
+       bill_mode HOURLY;
+       power_market Market_1;
 }
 
 object house {
@@ -2901,8 +2861,13 @@ object house {
      schedule_skew 406;
      heating_system_type HEAT_PUMP;
      cooling_system_type HEAT_PUMP;
+     gas_enduses DRYER|RANGE;
        heating_setpoint heating3*1;
-
+#if HEATSET_PROB<${URAND}
+      thermostat_mode OFF;
+#else
+      thermostat_mode HEAT;
+#endif
      object controller {
            schedule_skew 406;
            market Market_1;
@@ -2924,20 +2889,10 @@ object house {
        };
 
      thermal_integrity_level 5;
-     air_temperature 70;
-     mass_temperature 70;
+          initial_temperature_shift random.uniform(-0.5,+0.5);
+     air_temperature ($heating_setpoint+$initial_temperature_shift); 
+     mass_temperature ($heating_setpoint); 
      cooling_COP 3.2;
-     object ZIPload {
-           base_power LIGHTS*1.32;
-           schedule_skew 406;
-           heatgain_fraction 0.9;
-           power_pf 1.000;
-           current_pf 1.000;
-           impedance_pf 1.000;
-           impedance_fraction 0.300000;
-           current_fraction 0.300000;
-           power_fraction 0.400000;
-     };
 }
 
 object triplex_line {
@@ -2952,9 +2907,12 @@ object triplex_line {
 
 object triplex_meter {
        name tm_C_5_671;
+       bill_day 28;
        phases CS;
        nominal_voltage 120;
        groupid House_Meter;
+       bill_mode HOURLY;
+       power_market Market_1;
 }
 
 object house {
@@ -2964,8 +2922,13 @@ object house {
      schedule_skew -3060;
      heating_system_type HEAT_PUMP;
      cooling_system_type HEAT_PUMP;
+     gas_enduses DRYER|RANGE;
        heating_setpoint heating2*1;
-
+#if HEATSET_PROB<${URAND}
+      thermostat_mode OFF;
+#else
+      thermostat_mode HEAT;
+#endif
      object controller {
            schedule_skew -3060;
            market Market_1;
@@ -2987,20 +2950,10 @@ object house {
        };
 
      thermal_integrity_level 4;
-     air_temperature 70;
-     mass_temperature 70;
+          initial_temperature_shift random.uniform(-0.5,+0.5);
+     air_temperature ($heating_setpoint+$initial_temperature_shift); 
+     mass_temperature ($heating_setpoint); 
      cooling_COP 3.7;
-     object ZIPload {
-           base_power LIGHTS*0.62;
-           schedule_skew -3060;
-           heatgain_fraction 0.9;
-           power_pf 1.000;
-           current_pf 1.000;
-           impedance_pf 1.000;
-           impedance_fraction 0.300000;
-           current_fraction 0.300000;
-           power_fraction 0.400000;
-     };
 }
 
 object triplex_line {
@@ -3015,9 +2968,12 @@ object triplex_line {
 
 object triplex_meter {
        name tm_C_6_671;
+       bill_day 28;
        phases CS;
        nominal_voltage 120;
        groupid House_Meter;
+       bill_mode HOURLY;
+       power_market Market_1;
 }
 
 object house {
@@ -3028,7 +2984,12 @@ object house {
      heating_system_type HEAT_PUMP;
      heating_COP 2.8;
      cooling_system_type HEAT_PUMP;
-
+     gas_enduses DRYER|RANGE;
+#if HEATSET_PROB<${URAND}
+      thermostat_mode OFF;
+#else
+      thermostat_mode HEAT;
+#endif
      object controller {
            schedule_skew -2453;
            market Market_1;
@@ -3054,20 +3015,10 @@ object house {
        };
 
      thermal_integrity_level 6;
-     air_temperature 70;
-     mass_temperature 70;
+          initial_temperature_shift random.uniform(-0.5,+0.5);
+     air_temperature ($heating_setpoint+$initial_temperature_shift); 
+     mass_temperature ($heating_setpoint); 
      cooling_COP 3.2;
-     object ZIPload {
-           base_power LIGHTS*1.34;
-           schedule_skew -2453;
-           heatgain_fraction 0.9;
-           power_pf 1.000;
-           current_pf 1.000;
-           impedance_pf 1.000;
-           impedance_fraction 0.300000;
-           current_fraction 0.300000;
-           power_fraction 0.400000;
-     };
      object waterheater {
           schedule_skew -2453;
           tank_volume 50;
@@ -3106,9 +3057,12 @@ object triplex_line {
 
 object triplex_meter {
        name tm_C_7_671;
+       bill_day 28;
        phases CS;
        nominal_voltage 120;
        groupid House_Meter;
+       bill_mode HOURLY;
+       power_market Market_1;
 }
 
 object house {
@@ -3119,7 +3073,12 @@ object house {
      heating_system_type HEAT_PUMP;
      heating_COP 2.6;
      cooling_system_type HEAT_PUMP;
-
+     gas_enduses DRYER|RANGE;
+#if HEATSET_PROB<${URAND}
+      thermostat_mode OFF;
+#else
+      thermostat_mode HEAT;
+#endif
      object controller {
            schedule_skew -530;
            market Market_1;
@@ -3145,20 +3104,10 @@ object house {
        };
 
      thermal_integrity_level 4;
-     air_temperature 70;
-     mass_temperature 70;
+          initial_temperature_shift random.uniform(-0.5,+0.5);
+     air_temperature ($heating_setpoint+$initial_temperature_shift); 
+     mass_temperature ($heating_setpoint); 
      cooling_COP 3.3;
-     object ZIPload {
-           base_power LIGHTS*1.08;
-           schedule_skew -530;
-           heatgain_fraction 0.9;
-           power_pf 1.000;
-           current_pf 1.000;
-           impedance_pf 1.000;
-           impedance_fraction 0.300000;
-           current_fraction 0.300000;
-           power_fraction 0.400000;
-     };
      object waterheater {
           schedule_skew -530;
           tank_volume 50;
@@ -3220,9 +3169,12 @@ object triplex_line {
 
 object triplex_meter {
        name tm_A_1_675;
+       bill_day 28;
        phases AS;
        nominal_voltage 120;
        groupid House_Meter;
+       bill_mode HOURLY;
+       power_market Market_1;
 }
 
 object house {
@@ -3233,7 +3185,12 @@ object house {
      heating_system_type HEAT_PUMP;
      heating_COP 2.5;
      cooling_system_type HEAT_PUMP;
-
+     gas_enduses DRYER|RANGE;
+#if HEATSET_PROB<${URAND}
+      thermostat_mode OFF;
+#else
+      thermostat_mode HEAT;
+#endif
      object controller {
            schedule_skew 1065;
            market Market_1;
@@ -3259,20 +3216,10 @@ object house {
        };
 
      thermal_integrity_level 5;
-     air_temperature 70;
-     mass_temperature 70;
+          initial_temperature_shift random.uniform(-0.5,+0.5);
+     air_temperature ($heating_setpoint+$initial_temperature_shift); 
+     mass_temperature ($heating_setpoint); 
      cooling_COP 2.9;
-     object ZIPload {
-           base_power LIGHTS*0.74;
-           schedule_skew 1065;
-           heatgain_fraction 0.9;
-           power_pf 1.000;
-           current_pf 1.000;
-           impedance_pf 1.000;
-           impedance_fraction 0.300000;
-           current_fraction 0.300000;
-           power_fraction 0.400000;
-     };
      object waterheater {
           schedule_skew 1065;
           tank_volume 50;
@@ -3311,9 +3258,12 @@ object triplex_line {
 
 object triplex_meter {
        name tm_A_2_675;
+       bill_day 28;
        phases AS;
        nominal_voltage 120;
        groupid House_Meter;
+       bill_mode HOURLY;
+       power_market Market_1;
 }
 
 object house {
@@ -3324,7 +3274,12 @@ object house {
      heating_system_type HEAT_PUMP;
      heating_COP 2.4;
      cooling_system_type HEAT_PUMP;
-
+     gas_enduses DRYER|RANGE;
+#if HEATSET_PROB<${URAND}
+      thermostat_mode OFF;
+#else
+      thermostat_mode HEAT;
+#endif
      object controller {
            schedule_skew 2386;
            market Market_1;
@@ -3350,20 +3305,10 @@ object house {
        };
 
      thermal_integrity_level 5;
-     air_temperature 70;
-     mass_temperature 70;
+          initial_temperature_shift random.uniform(-0.5,+0.5);
+     air_temperature ($heating_setpoint+$initial_temperature_shift); 
+     mass_temperature ($heating_setpoint); 
      cooling_COP 2.7;
-     object ZIPload {
-           base_power LIGHTS*0.73;
-           schedule_skew 2386;
-           heatgain_fraction 0.9;
-           power_pf 1.000;
-           current_pf 1.000;
-           impedance_pf 1.000;
-           impedance_fraction 0.300000;
-           current_fraction 0.300000;
-           power_fraction 0.400000;
-     };
      object waterheater {
           schedule_skew 2386;
           tank_volume 50;
@@ -3402,9 +3347,12 @@ object triplex_line {
 
 object triplex_meter {
        name tm_A_3_675;
+       bill_day 28;
        phases AS;
        nominal_voltage 120;
        groupid House_Meter;
+       bill_mode HOURLY;
+       power_market Market_1;
 }
 
 object house {
@@ -3414,8 +3362,13 @@ object house {
      schedule_skew -1763;
      heating_system_type HEAT_PUMP;
      cooling_system_type HEAT_PUMP;
+     gas_enduses DRYER|RANGE;
        heating_setpoint heating3*1;
-
+#if HEATSET_PROB<${URAND}
+      thermostat_mode OFF;
+#else
+      thermostat_mode HEAT;
+#endif
      object controller {
            schedule_skew -1763;
            market Market_1;
@@ -3437,20 +3390,10 @@ object house {
        };
 
      thermal_integrity_level 3;
-     air_temperature 70;
-     mass_temperature 70;
+          initial_temperature_shift random.uniform(-0.5,+0.5);
+     air_temperature ($heating_setpoint+$initial_temperature_shift); 
+     mass_temperature ($heating_setpoint); 
      cooling_COP 2.6;
-     object ZIPload {
-           base_power LIGHTS*1.20;
-           schedule_skew -1763;
-           heatgain_fraction 0.9;
-           power_pf 1.000;
-           current_pf 1.000;
-           impedance_pf 1.000;
-           impedance_fraction 0.300000;
-           current_fraction 0.300000;
-           power_fraction 0.400000;
-     };
 }
 
 object triplex_line {
@@ -3465,9 +3408,12 @@ object triplex_line {
 
 object triplex_meter {
        name tm_A_4_675;
+       bill_day 28;
        phases AS;
        nominal_voltage 120;
        groupid House_Meter;
+       bill_mode HOURLY;
+       power_market Market_1;
 }
 
 object house {
@@ -3478,7 +3424,12 @@ object house {
      heating_system_type HEAT_PUMP;
      heating_COP 3.2;
      cooling_system_type HEAT_PUMP;
-
+     gas_enduses DRYER|RANGE;
+#if HEATSET_PROB<${URAND}
+      thermostat_mode OFF;
+#else
+      thermostat_mode HEAT;
+#endif
      object controller {
            schedule_skew -3600;
            market Market_1;
@@ -3504,20 +3455,10 @@ object house {
        };
 
      thermal_integrity_level 2;
-     air_temperature 70;
-     mass_temperature 70;
+          initial_temperature_shift random.uniform(-0.5,+0.5);
+     air_temperature ($heating_setpoint+$initial_temperature_shift); 
+     mass_temperature ($heating_setpoint); 
      cooling_COP 3.1;
-     object ZIPload {
-           base_power LIGHTS*1.15;
-           schedule_skew -3600;
-           heatgain_fraction 0.9;
-           power_pf 1.000;
-           current_pf 1.000;
-           impedance_pf 1.000;
-           impedance_fraction 0.300000;
-           current_fraction 0.300000;
-           power_fraction 0.400000;
-     };
      object waterheater {
           schedule_skew -3600;
           tank_volume 50;
@@ -3556,9 +3497,12 @@ object triplex_line {
 
 object triplex_meter {
        name tm_A_5_675;
+       bill_day 28;
        phases AS;
        nominal_voltage 120;
        groupid House_Meter;
+       bill_mode HOURLY;
+       power_market Market_1;
 }
 
 object house {
@@ -3568,8 +3512,13 @@ object house {
      schedule_skew -622;
      heating_system_type HEAT_PUMP;
      cooling_system_type HEAT_PUMP;
+     gas_enduses DRYER|RANGE;
        heating_setpoint heating5*1;
-
+#if HEATSET_PROB<${URAND}
+      thermostat_mode OFF;
+#else
+      thermostat_mode HEAT;
+#endif
      object controller {
            schedule_skew -622;
            market Market_1;
@@ -3591,20 +3540,10 @@ object house {
        };
 
      thermal_integrity_level 4;
-     air_temperature 70;
-     mass_temperature 70;
+          initial_temperature_shift random.uniform(-0.5,+0.5);
+     air_temperature ($heating_setpoint+$initial_temperature_shift); 
+     mass_temperature ($heating_setpoint); 
      cooling_COP 3.3;
-     object ZIPload {
-           base_power LIGHTS*1.35;
-           schedule_skew -622;
-           heatgain_fraction 0.9;
-           power_pf 1.000;
-           current_pf 1.000;
-           impedance_pf 1.000;
-           impedance_fraction 0.300000;
-           current_fraction 0.300000;
-           power_fraction 0.400000;
-     };
 }
 
 object triplex_line {
@@ -3619,9 +3558,12 @@ object triplex_line {
 
 object triplex_meter {
        name tm_A_6_675;
+       bill_day 28;
        phases AS;
        nominal_voltage 120;
        groupid House_Meter;
+       bill_mode HOURLY;
+       power_market Market_1;
 }
 
 object house {
@@ -3631,8 +3573,13 @@ object house {
      schedule_skew 1258;
      heating_system_type HEAT_PUMP;
      cooling_system_type HEAT_PUMP;
+     gas_enduses DRYER|RANGE;
        heating_setpoint heating5*1;
-
+#if HEATSET_PROB<${URAND}
+      thermostat_mode OFF;
+#else
+      thermostat_mode HEAT;
+#endif
      object controller {
            schedule_skew 1258;
            market Market_1;
@@ -3654,20 +3601,10 @@ object house {
        };
 
      thermal_integrity_level 5;
-     air_temperature 70;
-     mass_temperature 70;
+          initial_temperature_shift random.uniform(-0.5,+0.5);
+     air_temperature ($heating_setpoint+$initial_temperature_shift); 
+     mass_temperature ($heating_setpoint); 
      cooling_COP 3.3;
-     object ZIPload {
-           base_power LIGHTS*1.64;
-           schedule_skew 1258;
-           heatgain_fraction 0.9;
-           power_pf 1.000;
-           current_pf 1.000;
-           impedance_pf 1.000;
-           impedance_fraction 0.300000;
-           current_fraction 0.300000;
-           power_fraction 0.400000;
-     };
 }
 
 object triplex_line {
@@ -3682,9 +3619,12 @@ object triplex_line {
 
 object triplex_meter {
        name tm_A_7_675;
+       bill_day 28;
        phases AS;
        nominal_voltage 120;
        groupid House_Meter;
+       bill_mode HOURLY;
+       power_market Market_1;
 }
 
 object house {
@@ -3695,7 +3635,12 @@ object house {
      heating_system_type HEAT_PUMP;
      heating_COP 3.1;
      cooling_system_type HEAT_PUMP;
-
+     gas_enduses DRYER|RANGE;
+#if HEATSET_PROB<${URAND}
+      thermostat_mode OFF;
+#else
+      thermostat_mode HEAT;
+#endif
      object controller {
            schedule_skew 346;
            market Market_1;
@@ -3721,20 +3666,10 @@ object house {
        };
 
      thermal_integrity_level 5;
-     air_temperature 70;
-     mass_temperature 70;
+          initial_temperature_shift random.uniform(-0.5,+0.5);
+     air_temperature ($heating_setpoint+$initial_temperature_shift); 
+     mass_temperature ($heating_setpoint); 
      cooling_COP 3.9;
-     object ZIPload {
-           base_power LIGHTS*1.54;
-           schedule_skew 346;
-           heatgain_fraction 0.9;
-           power_pf 1.000;
-           current_pf 1.000;
-           impedance_pf 1.000;
-           impedance_fraction 0.300000;
-           current_fraction 0.300000;
-           power_fraction 0.400000;
-     };
      object waterheater {
           schedule_skew 346;
           tank_volume 50;
@@ -3773,9 +3708,12 @@ object triplex_line {
 
 object triplex_meter {
        name tm_A_8_675;
+       bill_day 28;
        phases AS;
        nominal_voltage 120;
        groupid House_Meter;
+       bill_mode HOURLY;
+       power_market Market_1;
 }
 
 object house {
@@ -3785,8 +3723,13 @@ object house {
      schedule_skew -473;
      heating_system_type HEAT_PUMP;
      cooling_system_type HEAT_PUMP;
+     gas_enduses DRYER|RANGE;
        heating_setpoint heating7*1;
-
+#if HEATSET_PROB<${URAND}
+      thermostat_mode OFF;
+#else
+      thermostat_mode HEAT;
+#endif
      object controller {
            schedule_skew -473;
            market Market_1;
@@ -3808,20 +3751,10 @@ object house {
        };
 
      thermal_integrity_level 6;
-     air_temperature 70;
-     mass_temperature 70;
+          initial_temperature_shift random.uniform(-0.5,+0.5);
+     air_temperature ($heating_setpoint+$initial_temperature_shift); 
+     mass_temperature ($heating_setpoint); 
      cooling_COP 3.3;
-     object ZIPload {
-           base_power LIGHTS*1.11;
-           schedule_skew -473;
-           heatgain_fraction 0.9;
-           power_pf 1.000;
-           current_pf 1.000;
-           impedance_pf 1.000;
-           impedance_fraction 0.300000;
-           current_fraction 0.300000;
-           power_fraction 0.400000;
-     };
 }
 
 object transformer {
@@ -3859,9 +3792,12 @@ object triplex_line {
 
 object triplex_meter {
        name tm_B_1_675;
+       bill_day 28;
        phases BS;
        nominal_voltage 120;
        groupid House_Meter;
+       bill_mode HOURLY;
+       power_market Market_1;
 }
 
 object house {
@@ -3872,7 +3808,12 @@ object house {
      heating_system_type HEAT_PUMP;
      heating_COP 2.4;
      cooling_system_type HEAT_PUMP;
-
+     gas_enduses DRYER|RANGE;
+#if HEATSET_PROB<${URAND}
+      thermostat_mode OFF;
+#else
+      thermostat_mode HEAT;
+#endif
      object controller {
            schedule_skew -2708;
            market Market_1;
@@ -3898,20 +3839,10 @@ object house {
        };
 
      thermal_integrity_level 4;
-     air_temperature 70;
-     mass_temperature 70;
+          initial_temperature_shift random.uniform(-0.5,+0.5);
+     air_temperature ($heating_setpoint+$initial_temperature_shift); 
+     mass_temperature ($heating_setpoint); 
      cooling_COP 4.0;
-     object ZIPload {
-           base_power LIGHTS*0.99;
-           schedule_skew -2708;
-           heatgain_fraction 0.9;
-           power_pf 1.000;
-           current_pf 1.000;
-           impedance_pf 1.000;
-           impedance_fraction 0.300000;
-           current_fraction 0.300000;
-           power_fraction 0.400000;
-     };
      object waterheater {
           schedule_skew -2708;
           tank_volume 50;
@@ -3950,9 +3881,12 @@ object triplex_line {
 
 object triplex_meter {
        name tm_B_2_675;
+       bill_day 28;
        phases BS;
        nominal_voltage 120;
        groupid House_Meter;
+       bill_mode HOURLY;
+       power_market Market_1;
 }
 
 object house {
@@ -3963,7 +3897,12 @@ object house {
      heating_system_type HEAT_PUMP;
      heating_COP 2.7;
      cooling_system_type HEAT_PUMP;
-
+     gas_enduses DRYER|RANGE;
+#if HEATSET_PROB<${URAND}
+      thermostat_mode OFF;
+#else
+      thermostat_mode HEAT;
+#endif
      object controller {
            schedule_skew 483;
            market Market_1;
@@ -3989,20 +3928,10 @@ object house {
        };
 
      thermal_integrity_level 4;
-     air_temperature 70;
-     mass_temperature 70;
+          initial_temperature_shift random.uniform(-0.5,+0.5);
+     air_temperature ($heating_setpoint+$initial_temperature_shift); 
+     mass_temperature ($heating_setpoint); 
      cooling_COP 3.0;
-     object ZIPload {
-           base_power LIGHTS*1.47;
-           schedule_skew 483;
-           heatgain_fraction 0.9;
-           power_pf 1.000;
-           current_pf 1.000;
-           impedance_pf 1.000;
-           impedance_fraction 0.300000;
-           current_fraction 0.300000;
-           power_fraction 0.400000;
-     };
      object waterheater {
           schedule_skew 483;
           tank_volume 50;
@@ -4041,9 +3970,12 @@ object triplex_line {
 
 object triplex_meter {
        name tm_B_3_675;
+       bill_day 28;
        phases BS;
        nominal_voltage 120;
        groupid House_Meter;
+       bill_mode HOURLY;
+       power_market Market_1;
 }
 
 object house {
@@ -4053,8 +3985,13 @@ object house {
      schedule_skew -1584;
      heating_system_type HEAT_PUMP;
      cooling_system_type HEAT_PUMP;
+     gas_enduses DRYER|RANGE;
        heating_setpoint heating3*1;
-
+#if HEATSET_PROB<${URAND}
+      thermostat_mode OFF;
+#else
+      thermostat_mode HEAT;
+#endif
      object controller {
            schedule_skew -1584;
            market Market_1;
@@ -4076,20 +4013,10 @@ object house {
        };
 
      thermal_integrity_level 4;
-     air_temperature 70;
-     mass_temperature 70;
+          initial_temperature_shift random.uniform(-0.5,+0.5);
+     air_temperature ($heating_setpoint+$initial_temperature_shift); 
+     mass_temperature ($heating_setpoint); 
      cooling_COP 3.7;
-     object ZIPload {
-           base_power LIGHTS*1.14;
-           schedule_skew -1584;
-           heatgain_fraction 0.9;
-           power_pf 1.000;
-           current_pf 1.000;
-           impedance_pf 1.000;
-           impedance_fraction 0.300000;
-           current_fraction 0.300000;
-           power_fraction 0.400000;
-     };
 }
 
 object triplex_line {
@@ -4104,9 +4031,12 @@ object triplex_line {
 
 object triplex_meter {
        name tm_B_4_675;
+       bill_day 28;
        phases BS;
        nominal_voltage 120;
        groupid House_Meter;
+       bill_mode HOURLY;
+       power_market Market_1;
 }
 
 object house {
@@ -4116,8 +4046,13 @@ object house {
      schedule_skew -2525;
      heating_system_type HEAT_PUMP;
      cooling_system_type HEAT_PUMP;
+     gas_enduses DRYER|RANGE;
        heating_setpoint heating3*1;
-
+#if HEATSET_PROB<${URAND}
+      thermostat_mode OFF;
+#else
+      thermostat_mode HEAT;
+#endif
      object controller {
            schedule_skew -2525;
            market Market_1;
@@ -4139,20 +4074,10 @@ object house {
        };
 
      thermal_integrity_level 3;
-     air_temperature 70;
-     mass_temperature 70;
+          initial_temperature_shift random.uniform(-0.5,+0.5);
+     air_temperature ($heating_setpoint+$initial_temperature_shift); 
+     mass_temperature ($heating_setpoint); 
      cooling_COP 3.2;
-     object ZIPload {
-           base_power LIGHTS*1.15;
-           schedule_skew -2525;
-           heatgain_fraction 0.9;
-           power_pf 1.000;
-           current_pf 1.000;
-           impedance_pf 1.000;
-           impedance_fraction 0.300000;
-           current_fraction 0.300000;
-           power_fraction 0.400000;
-     };
 }
 
 object triplex_line {
@@ -4167,9 +4092,12 @@ object triplex_line {
 
 object triplex_meter {
        name tm_B_5_675;
+       bill_day 28;
        phases BS;
        nominal_voltage 120;
        groupid House_Meter;
+       bill_mode HOURLY;
+       power_market Market_1;
 }
 
 object house {
@@ -4180,7 +4108,12 @@ object house {
      heating_system_type HEAT_PUMP;
      heating_COP 3.3;
      cooling_system_type HEAT_PUMP;
-
+     gas_enduses DRYER|RANGE;
+#if HEATSET_PROB<${URAND}
+      thermostat_mode OFF;
+#else
+      thermostat_mode HEAT;
+#endif
      object controller {
            schedule_skew 933;
            market Market_1;
@@ -4206,20 +4139,10 @@ object house {
        };
 
      thermal_integrity_level 4;
-     air_temperature 70;
-     mass_temperature 70;
+          initial_temperature_shift random.uniform(-0.5,+0.5);
+     air_temperature ($heating_setpoint+$initial_temperature_shift); 
+     mass_temperature ($heating_setpoint); 
      cooling_COP 3.1;
-     object ZIPload {
-           base_power LIGHTS*0.85;
-           schedule_skew 933;
-           heatgain_fraction 0.9;
-           power_pf 1.000;
-           current_pf 1.000;
-           impedance_pf 1.000;
-           impedance_fraction 0.300000;
-           current_fraction 0.300000;
-           power_fraction 0.400000;
-     };
      object waterheater {
           schedule_skew 933;
           tank_volume 50;
@@ -4258,9 +4181,12 @@ object triplex_line {
 
 object triplex_meter {
        name tm_B_6_675;
+       bill_day 28;
        phases BS;
        nominal_voltage 120;
        groupid House_Meter;
+       bill_mode HOURLY;
+       power_market Market_1;
 }
 
 object house {
@@ -4271,7 +4197,12 @@ object house {
      heating_system_type HEAT_PUMP;
      heating_COP 3.2;
      cooling_system_type HEAT_PUMP;
-
+     gas_enduses DRYER|RANGE;
+#if HEATSET_PROB<${URAND}
+      thermostat_mode OFF;
+#else
+      thermostat_mode HEAT;
+#endif
      object controller {
            schedule_skew -1047;
            market Market_1;
@@ -4297,20 +4228,10 @@ object house {
        };
 
      thermal_integrity_level 5;
-     air_temperature 70;
-     mass_temperature 70;
+          initial_temperature_shift random.uniform(-0.5,+0.5);
+     air_temperature ($heating_setpoint+$initial_temperature_shift); 
+     mass_temperature ($heating_setpoint); 
      cooling_COP 2.7;
-     object ZIPload {
-           base_power LIGHTS*1.10;
-           schedule_skew -1047;
-           heatgain_fraction 0.9;
-           power_pf 1.000;
-           current_pf 1.000;
-           impedance_pf 1.000;
-           impedance_fraction 0.300000;
-           current_fraction 0.300000;
-           power_fraction 0.400000;
-     };
      object waterheater {
           schedule_skew -1047;
           tank_volume 50;
@@ -4349,9 +4270,12 @@ object triplex_line {
 
 object triplex_meter {
        name tm_B_7_675;
+       bill_day 28;
        phases BS;
        nominal_voltage 120;
        groupid House_Meter;
+       bill_mode HOURLY;
+       power_market Market_1;
 }
 
 object house {
@@ -4362,7 +4286,12 @@ object house {
      heating_system_type HEAT_PUMP;
      heating_COP 3.1;
      cooling_system_type HEAT_PUMP;
-
+     gas_enduses DRYER|RANGE;
+#if HEATSET_PROB<${URAND}
+      thermostat_mode OFF;
+#else
+      thermostat_mode HEAT;
+#endif
      object controller {
            schedule_skew -360;
            market Market_1;
@@ -4388,20 +4317,10 @@ object house {
        };
 
      thermal_integrity_level 6;
-     air_temperature 70;
-     mass_temperature 70;
+          initial_temperature_shift random.uniform(-0.5,+0.5);
+     air_temperature ($heating_setpoint+$initial_temperature_shift); 
+     mass_temperature ($heating_setpoint); 
      cooling_COP 3.6;
-     object ZIPload {
-           base_power LIGHTS*0.84;
-           schedule_skew -360;
-           heatgain_fraction 0.9;
-           power_pf 1.000;
-           current_pf 1.000;
-           impedance_pf 1.000;
-           impedance_fraction 0.300000;
-           current_fraction 0.300000;
-           power_fraction 0.400000;
-     };
      object waterheater {
           schedule_skew -360;
           tank_volume 50;
@@ -4440,9 +4359,12 @@ object triplex_line {
 
 object triplex_meter {
        name tm_B_8_675;
+       bill_day 28;
        phases BS;
        nominal_voltage 120;
        groupid House_Meter;
+       bill_mode HOURLY;
+       power_market Market_1;
 }
 
 object house {
@@ -4453,7 +4375,12 @@ object house {
      heating_system_type HEAT_PUMP;
      heating_COP 3.1;
      cooling_system_type HEAT_PUMP;
-
+     gas_enduses DRYER|RANGE;
+#if HEATSET_PROB<${URAND}
+      thermostat_mode OFF;
+#else
+      thermostat_mode HEAT;
+#endif
      object controller {
            schedule_skew -695;
            market Market_1;
@@ -4479,20 +4406,10 @@ object house {
        };
 
      thermal_integrity_level 5;
-     air_temperature 70;
-     mass_temperature 70;
+          initial_temperature_shift random.uniform(-0.5,+0.5);
+     air_temperature ($heating_setpoint+$initial_temperature_shift); 
+     mass_temperature ($heating_setpoint); 
      cooling_COP 3.1;
-     object ZIPload {
-           base_power LIGHTS*1.37;
-           schedule_skew -695;
-           heatgain_fraction 0.9;
-           power_pf 1.000;
-           current_pf 1.000;
-           impedance_pf 1.000;
-           impedance_fraction 0.300000;
-           current_fraction 0.300000;
-           power_fraction 0.400000;
-     };
      object waterheater {
           schedule_skew -695;
           tank_volume 50;
@@ -4531,9 +4448,12 @@ object triplex_line {
 
 object triplex_meter {
        name tm_B_9_675;
+       bill_day 28;
        phases BS;
        nominal_voltage 120;
        groupid House_Meter;
+       bill_mode HOURLY;
+       power_market Market_1;
 }
 
 object house {
@@ -4543,8 +4463,13 @@ object house {
      schedule_skew 2;
      heating_system_type HEAT_PUMP;
      cooling_system_type HEAT_PUMP;
+     gas_enduses DRYER|RANGE;
        heating_setpoint heating3*1;
-
+#if HEATSET_PROB<${URAND}
+      thermostat_mode OFF;
+#else
+      thermostat_mode HEAT;
+#endif
      object controller {
            schedule_skew 2;
            market Market_1;
@@ -4566,20 +4491,10 @@ object house {
        };
 
      thermal_integrity_level 5;
-     air_temperature 70;
-     mass_temperature 70;
+          initial_temperature_shift random.uniform(-0.5,+0.5);
+     air_temperature ($heating_setpoint+$initial_temperature_shift); 
+     mass_temperature ($heating_setpoint); 
      cooling_COP 3.7;
-     object ZIPload {
-           base_power LIGHTS*1.29;
-           schedule_skew 2;
-           heatgain_fraction 0.9;
-           power_pf 1.000;
-           current_pf 1.000;
-           impedance_pf 1.000;
-           impedance_fraction 0.300000;
-           current_fraction 0.300000;
-           power_fraction 0.400000;
-     };
 }
 
 object triplex_line {
@@ -4594,9 +4509,12 @@ object triplex_line {
 
 object triplex_meter {
        name tm_B_10_675;
+       bill_day 28;
        phases BS;
        nominal_voltage 120;
        groupid House_Meter;
+       bill_mode HOURLY;
+       power_market Market_1;
 }
 
 object house {
@@ -4607,7 +4525,12 @@ object house {
      heating_system_type HEAT_PUMP;
      heating_COP 2.2;
      cooling_system_type HEAT_PUMP;
-
+     gas_enduses DRYER|RANGE;
+#if HEATSET_PROB<${URAND}
+      thermostat_mode OFF;
+#else
+      thermostat_mode HEAT;
+#endif
      object controller {
            schedule_skew 349;
            market Market_1;
@@ -4633,20 +4556,10 @@ object house {
        };
 
      thermal_integrity_level 4;
-     air_temperature 70;
-     mass_temperature 70;
+          initial_temperature_shift random.uniform(-0.5,+0.5);
+     air_temperature ($heating_setpoint+$initial_temperature_shift); 
+     mass_temperature ($heating_setpoint); 
      cooling_COP 3.1;
-     object ZIPload {
-           base_power LIGHTS*1.01;
-           schedule_skew 349;
-           heatgain_fraction 0.9;
-           power_pf 1.000;
-           current_pf 1.000;
-           impedance_pf 1.000;
-           impedance_fraction 0.300000;
-           current_fraction 0.300000;
-           power_fraction 0.400000;
-     };
      object waterheater {
           schedule_skew 349;
           tank_volume 50;
@@ -4685,9 +4598,12 @@ object triplex_line {
 
 object triplex_meter {
        name tm_B_11_675;
+       bill_day 28;
        phases BS;
        nominal_voltage 120;
        groupid House_Meter;
+       bill_mode HOURLY;
+       power_market Market_1;
 }
 
 object house {
@@ -4698,7 +4614,12 @@ object house {
      heating_system_type HEAT_PUMP;
      heating_COP 3.5;
      cooling_system_type HEAT_PUMP;
-
+     gas_enduses DRYER|RANGE;
+#if HEATSET_PROB<${URAND}
+      thermostat_mode OFF;
+#else
+      thermostat_mode HEAT;
+#endif
      object controller {
            schedule_skew 1226;
            market Market_1;
@@ -4724,20 +4645,10 @@ object house {
        };
 
      thermal_integrity_level 3;
-     air_temperature 70;
-     mass_temperature 70;
+          initial_temperature_shift random.uniform(-0.5,+0.5);
+     air_temperature ($heating_setpoint+$initial_temperature_shift); 
+     mass_temperature ($heating_setpoint); 
      cooling_COP 3.1;
-     object ZIPload {
-           base_power LIGHTS*1.55;
-           schedule_skew 1226;
-           heatgain_fraction 0.9;
-           power_pf 1.000;
-           current_pf 1.000;
-           impedance_pf 1.000;
-           impedance_fraction 0.300000;
-           current_fraction 0.300000;
-           power_fraction 0.400000;
-     };
      object waterheater {
           schedule_skew 1226;
           tank_volume 50;
@@ -4776,9 +4687,12 @@ object triplex_line {
 
 object triplex_meter {
        name tm_B_12_675;
+       bill_day 28;
        phases BS;
        nominal_voltage 120;
        groupid House_Meter;
+       bill_mode HOURLY;
+       power_market Market_1;
 }
 
 object house {
@@ -4788,8 +4702,13 @@ object house {
      schedule_skew -625;
      heating_system_type HEAT_PUMP;
      cooling_system_type HEAT_PUMP;
+     gas_enduses DRYER|RANGE;
        heating_setpoint heating4*1;
-
+#if HEATSET_PROB<${URAND}
+      thermostat_mode OFF;
+#else
+      thermostat_mode HEAT;
+#endif
      object controller {
            schedule_skew -625;
            market Market_1;
@@ -4811,20 +4730,10 @@ object house {
        };
 
      thermal_integrity_level 3;
-     air_temperature 70;
-     mass_temperature 70;
+          initial_temperature_shift random.uniform(-0.5,+0.5);
+     air_temperature ($heating_setpoint+$initial_temperature_shift); 
+     mass_temperature ($heating_setpoint); 
      cooling_COP 2.6;
-     object ZIPload {
-           base_power LIGHTS*1.35;
-           schedule_skew -625;
-           heatgain_fraction 0.9;
-           power_pf 1.000;
-           current_pf 1.000;
-           impedance_pf 1.000;
-           impedance_fraction 0.300000;
-           current_fraction 0.300000;
-           power_fraction 0.400000;
-     };
 }
 
 object transformer {
@@ -4862,9 +4771,12 @@ object triplex_line {
 
 object triplex_meter {
        name tm_C_1_675;
+       bill_day 28;
        phases CS;
        nominal_voltage 120;
        groupid House_Meter;
+       bill_mode HOURLY;
+       power_market Market_1;
 }
 
 object house {
@@ -4875,7 +4787,12 @@ object house {
      heating_system_type HEAT_PUMP;
      heating_COP 2.1;
      cooling_system_type HEAT_PUMP;
-
+     gas_enduses DRYER|RANGE;
+#if HEATSET_PROB<${URAND}
+      thermostat_mode OFF;
+#else
+      thermostat_mode HEAT;
+#endif
      object controller {
            schedule_skew -3336;
            market Market_1;
@@ -4901,20 +4818,10 @@ object house {
        };
 
      thermal_integrity_level 4;
-     air_temperature 70;
-     mass_temperature 70;
+          initial_temperature_shift random.uniform(-0.5,+0.5);
+     air_temperature ($heating_setpoint+$initial_temperature_shift); 
+     mass_temperature ($heating_setpoint); 
      cooling_COP 3.5;
-     object ZIPload {
-           base_power LIGHTS*1.19;
-           schedule_skew -3336;
-           heatgain_fraction 0.9;
-           power_pf 1.000;
-           current_pf 1.000;
-           impedance_pf 1.000;
-           impedance_fraction 0.300000;
-           current_fraction 0.300000;
-           power_fraction 0.400000;
-     };
      object waterheater {
           schedule_skew -3336;
           tank_volume 50;
@@ -4953,9 +4860,12 @@ object triplex_line {
 
 object triplex_meter {
        name tm_C_2_675;
+       bill_day 28;
        phases CS;
        nominal_voltage 120;
        groupid House_Meter;
+       bill_mode HOURLY;
+       power_market Market_1;
 }
 
 object house {
@@ -4966,7 +4876,12 @@ object house {
      heating_system_type HEAT_PUMP;
      heating_COP 2.1;
      cooling_system_type HEAT_PUMP;
-
+     gas_enduses DRYER|RANGE;
+#if HEATSET_PROB<${URAND}
+      thermostat_mode OFF;
+#else
+      thermostat_mode HEAT;
+#endif
      object controller {
            schedule_skew -1437;
            market Market_1;
@@ -4992,20 +4907,10 @@ object house {
        };
 
      thermal_integrity_level 4;
-     air_temperature 70;
-     mass_temperature 70;
+          initial_temperature_shift random.uniform(-0.5,+0.5);
+     air_temperature ($heating_setpoint+$initial_temperature_shift); 
+     mass_temperature ($heating_setpoint); 
      cooling_COP 3.3;
-     object ZIPload {
-           base_power LIGHTS*1.76;
-           schedule_skew -1437;
-           heatgain_fraction 0.9;
-           power_pf 1.000;
-           current_pf 1.000;
-           impedance_pf 1.000;
-           impedance_fraction 0.300000;
-           current_fraction 0.300000;
-           power_fraction 0.400000;
-     };
      object waterheater {
           schedule_skew -1437;
           tank_volume 50;
@@ -5044,9 +4949,12 @@ object triplex_line {
 
 object triplex_meter {
        name tm_C_3_675;
+       bill_day 28;
        phases CS;
        nominal_voltage 120;
        groupid House_Meter;
+       bill_mode HOURLY;
+       power_market Market_1;
 }
 
 object house {
@@ -5057,7 +4965,12 @@ object house {
      heating_system_type HEAT_PUMP;
      heating_COP 3.1;
      cooling_system_type HEAT_PUMP;
-
+     gas_enduses DRYER|RANGE;
+#if HEATSET_PROB<${URAND}
+      thermostat_mode OFF;
+#else
+      thermostat_mode HEAT;
+#endif
      object controller {
            schedule_skew -2756;
            market Market_1;
@@ -5083,20 +4996,10 @@ object house {
        };
 
      thermal_integrity_level 3;
-     air_temperature 70;
-     mass_temperature 70;
+          initial_temperature_shift random.uniform(-0.5,+0.5);
+     air_temperature ($heating_setpoint+$initial_temperature_shift); 
+     mass_temperature ($heating_setpoint); 
      cooling_COP 3.5;
-     object ZIPload {
-           base_power LIGHTS*1.41;
-           schedule_skew -2756;
-           heatgain_fraction 0.9;
-           power_pf 1.000;
-           current_pf 1.000;
-           impedance_pf 1.000;
-           impedance_fraction 0.300000;
-           current_fraction 0.300000;
-           power_fraction 0.400000;
-     };
      object waterheater {
           schedule_skew -2756;
           tank_volume 50;
@@ -5135,9 +5038,12 @@ object triplex_line {
 
 object triplex_meter {
        name tm_C_4_675;
+       bill_day 28;
        phases CS;
        nominal_voltage 120;
        groupid House_Meter;
+       bill_mode HOURLY;
+       power_market Market_1;
 }
 
 object house {
@@ -5148,7 +5054,12 @@ object house {
      heating_system_type HEAT_PUMP;
      heating_COP 3.3;
      cooling_system_type HEAT_PUMP;
-
+     gas_enduses DRYER|RANGE;
+#if HEATSET_PROB<${URAND}
+      thermostat_mode OFF;
+#else
+      thermostat_mode HEAT;
+#endif
      object controller {
            schedule_skew 1673;
            market Market_1;
@@ -5174,20 +5085,10 @@ object house {
        };
 
      thermal_integrity_level 5;
-     air_temperature 70;
-     mass_temperature 70;
+          initial_temperature_shift random.uniform(-0.5,+0.5);
+     air_temperature ($heating_setpoint+$initial_temperature_shift); 
+     mass_temperature ($heating_setpoint); 
      cooling_COP 2.8;
-     object ZIPload {
-           base_power LIGHTS*0.85;
-           schedule_skew 1673;
-           heatgain_fraction 0.9;
-           power_pf 1.000;
-           current_pf 1.000;
-           impedance_pf 1.000;
-           impedance_fraction 0.300000;
-           current_fraction 0.300000;
-           power_fraction 0.400000;
-     };
      object waterheater {
           schedule_skew 1673;
           tank_volume 50;
@@ -5226,9 +5127,12 @@ object triplex_line {
 
 object triplex_meter {
        name tm_C_5_675;
+       bill_day 28;
        phases CS;
        nominal_voltage 120;
        groupid House_Meter;
+       bill_mode HOURLY;
+       power_market Market_1;
 }
 
 object house {
@@ -5239,7 +5143,12 @@ object house {
      heating_system_type HEAT_PUMP;
      heating_COP 2.9;
      cooling_system_type HEAT_PUMP;
-
+     gas_enduses DRYER|RANGE;
+#if HEATSET_PROB<${URAND}
+      thermostat_mode OFF;
+#else
+      thermostat_mode HEAT;
+#endif
      object controller {
            schedule_skew 1690;
            market Market_1;
@@ -5265,20 +5174,10 @@ object house {
        };
 
      thermal_integrity_level 6;
-     air_temperature 70;
-     mass_temperature 70;
+          initial_temperature_shift random.uniform(-0.5,+0.5);
+     air_temperature ($heating_setpoint+$initial_temperature_shift); 
+     mass_temperature ($heating_setpoint); 
      cooling_COP 3.8;
-     object ZIPload {
-           base_power LIGHTS*1.11;
-           schedule_skew 1690;
-           heatgain_fraction 0.9;
-           power_pf 1.000;
-           current_pf 1.000;
-           impedance_pf 1.000;
-           impedance_fraction 0.300000;
-           current_fraction 0.300000;
-           power_fraction 0.400000;
-     };
      object waterheater {
           schedule_skew 1690;
           tank_volume 50;
@@ -5317,9 +5216,12 @@ object triplex_line {
 
 object triplex_meter {
        name tm_C_6_675;
+       bill_day 28;
        phases CS;
        nominal_voltage 120;
        groupid House_Meter;
+       bill_mode HOURLY;
+       power_market Market_1;
 }
 
 object house {
@@ -5329,8 +5231,13 @@ object house {
      schedule_skew -687;
      heating_system_type HEAT_PUMP;
      cooling_system_type HEAT_PUMP;
+     gas_enduses DRYER|RANGE;
        heating_setpoint heating6*1;
-
+#if HEATSET_PROB<${URAND}
+      thermostat_mode OFF;
+#else
+      thermostat_mode HEAT;
+#endif
      object controller {
            schedule_skew -687;
            market Market_1;
@@ -5352,20 +5259,10 @@ object house {
        };
 
      thermal_integrity_level 3;
-     air_temperature 70;
-     mass_temperature 70;
+          initial_temperature_shift random.uniform(-0.5,+0.5);
+     air_temperature ($heating_setpoint+$initial_temperature_shift); 
+     mass_temperature ($heating_setpoint); 
      cooling_COP 3.0;
-     object ZIPload {
-           base_power LIGHTS*1.15;
-           schedule_skew -687;
-           heatgain_fraction 0.9;
-           power_pf 1.000;
-           current_pf 1.000;
-           impedance_pf 1.000;
-           impedance_fraction 0.300000;
-           current_fraction 0.300000;
-           power_fraction 0.400000;
-     };
 }
 
 object triplex_line {
@@ -5380,9 +5277,12 @@ object triplex_line {
 
 object triplex_meter {
        name tm_C_7_675;
+       bill_day 28;
        phases CS;
        nominal_voltage 120;
        groupid House_Meter;
+       bill_mode HOURLY;
+       power_market Market_1;
 }
 
 object house {
@@ -5393,7 +5293,12 @@ object house {
      heating_system_type HEAT_PUMP;
      heating_COP 2.9;
      cooling_system_type HEAT_PUMP;
-
+     gas_enduses DRYER|RANGE;
+#if HEATSET_PROB<${URAND}
+      thermostat_mode OFF;
+#else
+      thermostat_mode HEAT;
+#endif
      object controller {
            schedule_skew -231;
            market Market_1;
@@ -5419,20 +5324,10 @@ object house {
        };
 
      thermal_integrity_level 5;
-     air_temperature 70;
-     mass_temperature 70;
+          initial_temperature_shift random.uniform(-0.5,+0.5);
+     air_temperature ($heating_setpoint+$initial_temperature_shift); 
+     mass_temperature ($heating_setpoint); 
      cooling_COP 3.9;
-     object ZIPload {
-           base_power LIGHTS*1.16;
-           schedule_skew -231;
-           heatgain_fraction 0.9;
-           power_pf 1.000;
-           current_pf 1.000;
-           impedance_pf 1.000;
-           impedance_fraction 0.300000;
-           current_fraction 0.300000;
-           power_fraction 0.400000;
-     };
      object waterheater {
           schedule_skew -231;
           tank_volume 50;
@@ -5471,9 +5366,12 @@ object triplex_line {
 
 object triplex_meter {
        name tm_C_8_675;
+       bill_day 28;
        phases CS;
        nominal_voltage 120;
        groupid House_Meter;
+       bill_mode HOURLY;
+       power_market Market_1;
 }
 
 object house {
@@ -5483,8 +5381,13 @@ object house {
      schedule_skew -1291;
      heating_system_type HEAT_PUMP;
      cooling_system_type HEAT_PUMP;
+     gas_enduses DRYER|RANGE;
        heating_setpoint heating6*1;
-
+#if HEATSET_PROB<${URAND}
+      thermostat_mode OFF;
+#else
+      thermostat_mode HEAT;
+#endif
      object controller {
            schedule_skew -1291;
            market Market_1;
@@ -5506,20 +5409,10 @@ object house {
        };
 
      thermal_integrity_level 5;
-     air_temperature 70;
-     mass_temperature 70;
+          initial_temperature_shift random.uniform(-0.5,+0.5);
+     air_temperature ($heating_setpoint+$initial_temperature_shift); 
+     mass_temperature ($heating_setpoint); 
      cooling_COP 3.5;
-     object ZIPload {
-           base_power LIGHTS*1.34;
-           schedule_skew -1291;
-           heatgain_fraction 0.9;
-           power_pf 1.000;
-           current_pf 1.000;
-           impedance_pf 1.000;
-           impedance_fraction 0.300000;
-           current_fraction 0.300000;
-           power_fraction 0.400000;
-     };
 }
 
 object transformer {
@@ -5557,9 +5450,12 @@ object triplex_line {
 
 object triplex_meter {
        name tm_A_1_692;
+       bill_day 28;
        phases AS;
        nominal_voltage 120;
        groupid House_Meter;
+       bill_mode HOURLY;
+       power_market Market_1;
 }
 
 object house {
@@ -5569,8 +5465,13 @@ object house {
      schedule_skew 247;
      heating_system_type HEAT_PUMP;
      cooling_system_type HEAT_PUMP;
+     gas_enduses DRYER|RANGE;
        heating_setpoint heating7*1;
-
+#if HEATSET_PROB<${URAND}
+      thermostat_mode OFF;
+#else
+      thermostat_mode HEAT;
+#endif
      object controller {
            schedule_skew 247;
            market Market_1;
@@ -5592,20 +5493,10 @@ object house {
        };
 
      thermal_integrity_level 5;
-     air_temperature 70;
-     mass_temperature 70;
+          initial_temperature_shift random.uniform(-0.5,+0.5);
+     air_temperature ($heating_setpoint+$initial_temperature_shift); 
+     mass_temperature ($heating_setpoint); 
      cooling_COP 3.3;
-     object ZIPload {
-           base_power LIGHTS*1.15;
-           schedule_skew 247;
-           heatgain_fraction 0.9;
-           power_pf 1.000;
-           current_pf 1.000;
-           impedance_pf 1.000;
-           impedance_fraction 0.300000;
-           current_fraction 0.300000;
-           power_fraction 0.400000;
-     };
 }
 
 object triplex_line {
@@ -5620,9 +5511,12 @@ object triplex_line {
 
 object triplex_meter {
        name tm_A_2_692;
+       bill_day 28;
        phases AS;
        nominal_voltage 120;
        groupid House_Meter;
+       bill_mode HOURLY;
+       power_market Market_1;
 }
 
 object house {
@@ -5633,7 +5527,12 @@ object house {
      heating_system_type HEAT_PUMP;
      heating_COP 2.5;
      cooling_system_type HEAT_PUMP;
-
+     gas_enduses DRYER|RANGE;
+#if HEATSET_PROB<${URAND}
+      thermostat_mode OFF;
+#else
+      thermostat_mode HEAT;
+#endif
      object controller {
            schedule_skew 2484;
            market Market_1;
@@ -5659,20 +5558,10 @@ object house {
        };
 
      thermal_integrity_level 4;
-     air_temperature 70;
-     mass_temperature 70;
+          initial_temperature_shift random.uniform(-0.5,+0.5);
+     air_temperature ($heating_setpoint+$initial_temperature_shift); 
+     mass_temperature ($heating_setpoint); 
      cooling_COP 3.8;
-     object ZIPload {
-           base_power LIGHTS*1.52;
-           schedule_skew 2484;
-           heatgain_fraction 0.9;
-           power_pf 1.000;
-           current_pf 1.000;
-           impedance_pf 1.000;
-           impedance_fraction 0.300000;
-           current_fraction 0.300000;
-           power_fraction 0.400000;
-     };
      object waterheater {
           schedule_skew 2484;
           tank_volume 50;
@@ -5711,9 +5600,12 @@ object triplex_line {
 
 object triplex_meter {
        name tm_A_3_692;
+       bill_day 28;
        phases AS;
        nominal_voltage 120;
        groupid House_Meter;
+       bill_mode HOURLY;
+       power_market Market_1;
 }
 
 object house {
@@ -5723,8 +5615,13 @@ object house {
      schedule_skew -1154;
      heating_system_type HEAT_PUMP;
      cooling_system_type HEAT_PUMP;
+     gas_enduses DRYER|RANGE;
        heating_setpoint heating2*1;
-
+#if HEATSET_PROB<${URAND}
+      thermostat_mode OFF;
+#else
+      thermostat_mode HEAT;
+#endif
      object controller {
            schedule_skew -1154;
            market Market_1;
@@ -5746,20 +5643,10 @@ object house {
        };
 
      thermal_integrity_level 6;
-     air_temperature 70;
-     mass_temperature 70;
+          initial_temperature_shift random.uniform(-0.5,+0.5);
+     air_temperature ($heating_setpoint+$initial_temperature_shift); 
+     mass_temperature ($heating_setpoint); 
      cooling_COP 2.7;
-     object ZIPload {
-           base_power LIGHTS*0.69;
-           schedule_skew -1154;
-           heatgain_fraction 0.9;
-           power_pf 1.000;
-           current_pf 1.000;
-           impedance_pf 1.000;
-           impedance_fraction 0.300000;
-           current_fraction 0.300000;
-           power_fraction 0.400000;
-     };
 }
 
 object triplex_line {
@@ -5774,9 +5661,12 @@ object triplex_line {
 
 object triplex_meter {
        name tm_A_4_692;
+       bill_day 28;
        phases AS;
        nominal_voltage 120;
        groupid House_Meter;
+       bill_mode HOURLY;
+       power_market Market_1;
 }
 
 object house {
@@ -5786,8 +5676,13 @@ object house {
      schedule_skew -856;
      heating_system_type HEAT_PUMP;
      cooling_system_type HEAT_PUMP;
+     gas_enduses DRYER|RANGE;
        heating_setpoint heating1*1;
-
+#if HEATSET_PROB<${URAND}
+      thermostat_mode OFF;
+#else
+      thermostat_mode HEAT;
+#endif
      object controller {
            schedule_skew -856;
            market Market_1;
@@ -5809,20 +5704,10 @@ object house {
        };
 
      thermal_integrity_level 5;
-     air_temperature 70;
-     mass_temperature 70;
+          initial_temperature_shift random.uniform(-0.5,+0.5);
+     air_temperature ($heating_setpoint+$initial_temperature_shift); 
+     mass_temperature ($heating_setpoint); 
      cooling_COP 3.2;
-     object ZIPload {
-           base_power LIGHTS*0.80;
-           schedule_skew -856;
-           heatgain_fraction 0.9;
-           power_pf 1.000;
-           current_pf 1.000;
-           impedance_pf 1.000;
-           impedance_fraction 0.300000;
-           current_fraction 0.300000;
-           power_fraction 0.400000;
-     };
 }
 
 object triplex_line {
@@ -5837,9 +5722,12 @@ object triplex_line {
 
 object triplex_meter {
        name tm_A_5_692;
+       bill_day 28;
        phases AS;
        nominal_voltage 120;
        groupid House_Meter;
+       bill_mode HOURLY;
+       power_market Market_1;
 }
 
 object house {
@@ -5850,7 +5738,12 @@ object house {
      heating_system_type HEAT_PUMP;
      heating_COP 2.7;
      cooling_system_type HEAT_PUMP;
-
+     gas_enduses DRYER|RANGE;
+#if HEATSET_PROB<${URAND}
+      thermostat_mode OFF;
+#else
+      thermostat_mode HEAT;
+#endif
      object controller {
            schedule_skew 3572;
            market Market_1;
@@ -5876,20 +5769,10 @@ object house {
        };
 
      thermal_integrity_level 4;
-     air_temperature 70;
-     mass_temperature 70;
+          initial_temperature_shift random.uniform(-0.5,+0.5);
+     air_temperature ($heating_setpoint+$initial_temperature_shift); 
+     mass_temperature ($heating_setpoint); 
      cooling_COP 3.7;
-     object ZIPload {
-           base_power LIGHTS*1.13;
-           schedule_skew 3572;
-           heatgain_fraction 0.9;
-           power_pf 1.000;
-           current_pf 1.000;
-           impedance_pf 1.000;
-           impedance_fraction 0.300000;
-           current_fraction 0.300000;
-           power_fraction 0.400000;
-     };
      object waterheater {
           schedule_skew 3572;
           tank_volume 50;
@@ -5928,9 +5811,12 @@ object triplex_line {
 
 object triplex_meter {
        name tm_A_6_692;
+       bill_day 28;
        phases AS;
        nominal_voltage 120;
        groupid House_Meter;
+       bill_mode HOURLY;
+       power_market Market_1;
 }
 
 object house {
@@ -5941,7 +5827,12 @@ object house {
      heating_system_type HEAT_PUMP;
      heating_COP 2.6;
      cooling_system_type HEAT_PUMP;
-
+     gas_enduses DRYER|RANGE;
+#if HEATSET_PROB<${URAND}
+      thermostat_mode OFF;
+#else
+      thermostat_mode HEAT;
+#endif
      object controller {
            schedule_skew 372;
            market Market_1;
@@ -5967,20 +5858,10 @@ object house {
        };
 
      thermal_integrity_level 6;
-     air_temperature 70;
-     mass_temperature 70;
+          initial_temperature_shift random.uniform(-0.5,+0.5);
+     air_temperature ($heating_setpoint+$initial_temperature_shift); 
+     mass_temperature ($heating_setpoint); 
      cooling_COP 3.4;
-     object ZIPload {
-           base_power LIGHTS*1.11;
-           schedule_skew 372;
-           heatgain_fraction 0.9;
-           power_pf 1.000;
-           current_pf 1.000;
-           impedance_pf 1.000;
-           impedance_fraction 0.300000;
-           current_fraction 0.300000;
-           power_fraction 0.400000;
-     };
      object waterheater {
           schedule_skew 372;
           tank_volume 50;
@@ -6042,9 +5923,12 @@ object triplex_line {
 
 object triplex_meter {
        name tm_B_1_692;
+       bill_day 28;
        phases BS;
        nominal_voltage 120;
        groupid House_Meter;
+       bill_mode HOURLY;
+       power_market Market_1;
 }
 
 object house {
@@ -6055,7 +5939,12 @@ object house {
      heating_system_type HEAT_PUMP;
      heating_COP 3.4;
      cooling_system_type HEAT_PUMP;
-
+     gas_enduses DRYER|RANGE;
+#if HEATSET_PROB<${URAND}
+      thermostat_mode OFF;
+#else
+      thermostat_mode HEAT;
+#endif
      object controller {
            schedule_skew 491;
            market Market_1;
@@ -6081,20 +5970,10 @@ object house {
        };
 
      thermal_integrity_level 5;
-     air_temperature 70;
-     mass_temperature 70;
+          initial_temperature_shift random.uniform(-0.5,+0.5);
+     air_temperature ($heating_setpoint+$initial_temperature_shift); 
+     mass_temperature ($heating_setpoint); 
      cooling_COP 2.8;
-     object ZIPload {
-           base_power LIGHTS*1.51;
-           schedule_skew 491;
-           heatgain_fraction 0.9;
-           power_pf 1.000;
-           current_pf 1.000;
-           impedance_pf 1.000;
-           impedance_fraction 0.300000;
-           current_fraction 0.300000;
-           power_fraction 0.400000;
-     };
      object waterheater {
           schedule_skew 491;
           tank_volume 50;
@@ -6156,9 +6035,12 @@ object triplex_line {
 
 object triplex_meter {
        name tm_C_1_692;
+       bill_day 28;
        phases CS;
        nominal_voltage 120;
        groupid House_Meter;
+       bill_mode HOURLY;
+       power_market Market_1;
 }
 
 object house {
@@ -6168,8 +6050,13 @@ object house {
      schedule_skew 941;
      heating_system_type HEAT_PUMP;
      cooling_system_type HEAT_PUMP;
+     gas_enduses DRYER|RANGE;
        heating_setpoint heating1*1;
-
+#if HEATSET_PROB<${URAND}
+      thermostat_mode OFF;
+#else
+      thermostat_mode HEAT;
+#endif
      object controller {
            schedule_skew 941;
            market Market_1;
@@ -6191,20 +6078,10 @@ object house {
        };
 
      thermal_integrity_level 4;
-     air_temperature 70;
-     mass_temperature 70;
+          initial_temperature_shift random.uniform(-0.5,+0.5);
+     air_temperature ($heating_setpoint+$initial_temperature_shift); 
+     mass_temperature ($heating_setpoint); 
      cooling_COP 3.9;
-     object ZIPload {
-           base_power LIGHTS*1.53;
-           schedule_skew 941;
-           heatgain_fraction 0.9;
-           power_pf 1.000;
-           current_pf 1.000;
-           impedance_pf 1.000;
-           impedance_fraction 0.300000;
-           current_fraction 0.300000;
-           power_fraction 0.400000;
-     };
 }
 
 object transformer {
@@ -6242,9 +6119,12 @@ object triplex_line {
 
 object triplex_meter {
        name tm_C_1_611;
+       bill_day 28;
        phases CS;
        nominal_voltage 120;
        groupid House_Meter;
+       bill_mode HOURLY;
+       power_market Market_1;
 }
 
 object house {
@@ -6255,7 +6135,12 @@ object house {
      heating_system_type HEAT_PUMP;
      heating_COP 2.8;
      cooling_system_type HEAT_PUMP;
-
+     gas_enduses DRYER|RANGE;
+#if HEATSET_PROB<${URAND}
+      thermostat_mode OFF;
+#else
+      thermostat_mode HEAT;
+#endif
      object controller {
            schedule_skew 402;
            market Market_1;
@@ -6281,20 +6166,10 @@ object house {
        };
 
      thermal_integrity_level 4;
-     air_temperature 70;
-     mass_temperature 70;
+          initial_temperature_shift random.uniform(-0.5,+0.5);
+     air_temperature ($heating_setpoint+$initial_temperature_shift); 
+     mass_temperature ($heating_setpoint); 
      cooling_COP 2.7;
-     object ZIPload {
-           base_power LIGHTS*1.40;
-           schedule_skew 402;
-           heatgain_fraction 0.9;
-           power_pf 1.000;
-           current_pf 1.000;
-           impedance_pf 1.000;
-           impedance_fraction 0.300000;
-           current_fraction 0.300000;
-           power_fraction 0.400000;
-     };
      object waterheater {
           schedule_skew 402;
           tank_volume 50;
@@ -6356,9 +6231,12 @@ object triplex_line {
 
 object triplex_meter {
        name tm_A_1_6711;
+       bill_day 28;
        phases AS;
        nominal_voltage 120;
        groupid House_Meter;
+       bill_mode HOURLY;
+       power_market Market_1;
 }
 
 object house {
@@ -6369,7 +6247,12 @@ object house {
      heating_system_type HEAT_PUMP;
      heating_COP 2.1;
      cooling_system_type HEAT_PUMP;
-
+     gas_enduses DRYER|RANGE;
+#if HEATSET_PROB<${URAND}
+      thermostat_mode OFF;
+#else
+      thermostat_mode HEAT;
+#endif
      object controller {
            schedule_skew -1528;
            market Market_1;
@@ -6395,20 +6278,10 @@ object house {
        };
 
      thermal_integrity_level 4;
-     air_temperature 70;
-     mass_temperature 70;
+          initial_temperature_shift random.uniform(-0.5,+0.5);
+     air_temperature ($heating_setpoint+$initial_temperature_shift); 
+     mass_temperature ($heating_setpoint); 
      cooling_COP 3.4;
-     object ZIPload {
-           base_power LIGHTS*1.25;
-           schedule_skew -1528;
-           heatgain_fraction 0.9;
-           power_pf 1.000;
-           current_pf 1.000;
-           impedance_pf 1.000;
-           impedance_fraction 0.300000;
-           current_fraction 0.300000;
-           power_fraction 0.400000;
-     };
      object waterheater {
           schedule_skew -1528;
           tank_volume 50;
@@ -6470,9 +6343,12 @@ object triplex_line {
 
 object triplex_meter {
        name tm_B_1_6711;
+       bill_day 28;
        phases BS;
        nominal_voltage 120;
        groupid House_Meter;
+       bill_mode HOURLY;
+       power_market Market_1;
 }
 
 object house {
@@ -6483,7 +6359,12 @@ object house {
      heating_system_type HEAT_PUMP;
      heating_COP 2.5;
      cooling_system_type HEAT_PUMP;
-
+     gas_enduses DRYER|RANGE;
+#if HEATSET_PROB<${URAND}
+      thermostat_mode OFF;
+#else
+      thermostat_mode HEAT;
+#endif
      object controller {
            schedule_skew -3183;
            market Market_1;
@@ -6509,20 +6390,10 @@ object house {
        };
 
      thermal_integrity_level 3;
-     air_temperature 70;
-     mass_temperature 70;
+          initial_temperature_shift random.uniform(-0.5,+0.5);
+     air_temperature ($heating_setpoint+$initial_temperature_shift); 
+     mass_temperature ($heating_setpoint); 
      cooling_COP 3.9;
-     object ZIPload {
-           base_power LIGHTS*1.15;
-           schedule_skew -3183;
-           heatgain_fraction 0.9;
-           power_pf 1.000;
-           current_pf 1.000;
-           impedance_pf 1.000;
-           impedance_fraction 0.300000;
-           current_fraction 0.300000;
-           power_fraction 0.400000;
-     };
      object waterheater {
           schedule_skew -3183;
           tank_volume 50;
@@ -6584,9 +6455,12 @@ object triplex_line {
 
 object triplex_meter {
        name tm_C_1_6711;
+       bill_day 28;
        phases CS;
        nominal_voltage 120;
        groupid House_Meter;
+       bill_mode HOURLY;
+       power_market Market_1;
 }
 
 object house {
@@ -6597,7 +6471,12 @@ object house {
      heating_system_type HEAT_PUMP;
      heating_COP 3.4;
      cooling_system_type HEAT_PUMP;
-
+     gas_enduses DRYER|RANGE;
+#if HEATSET_PROB<${URAND}
+      thermostat_mode OFF;
+#else
+      thermostat_mode HEAT;
+#endif
      object controller {
            schedule_skew -1104;
            market Market_1;
@@ -6623,20 +6502,10 @@ object house {
        };
 
      thermal_integrity_level 4;
-     air_temperature 70;
-     mass_temperature 70;
+          initial_temperature_shift random.uniform(-0.5,+0.5);
+     air_temperature ($heating_setpoint+$initial_temperature_shift); 
+     mass_temperature ($heating_setpoint); 
      cooling_COP 3.2;
-     object ZIPload {
-           base_power LIGHTS*1.46;
-           schedule_skew -1104;
-           heatgain_fraction 0.9;
-           power_pf 1.000;
-           current_pf 1.000;
-           impedance_pf 1.000;
-           impedance_fraction 0.300000;
-           current_fraction 0.300000;
-           power_fraction 0.400000;
-     };
      object waterheater {
           schedule_skew -1104;
           tank_volume 50;
@@ -6698,9 +6567,12 @@ object triplex_line {
 
 object triplex_meter {
        name tm_A_1_6321;
+       bill_day 28;
        phases AS;
        nominal_voltage 120;
        groupid House_Meter;
+       bill_mode HOURLY;
+       power_market Market_1;
 }
 
 object house {
@@ -6710,8 +6582,13 @@ object house {
      schedule_skew 3600;
      heating_system_type HEAT_PUMP;
      cooling_system_type HEAT_PUMP;
+     gas_enduses DRYER|RANGE;
        heating_setpoint heating4*1;
-
+#if HEATSET_PROB<${URAND}
+      thermostat_mode OFF;
+#else
+      thermostat_mode HEAT;
+#endif
      object controller {
            schedule_skew 3600;
            market Market_1;
@@ -6733,20 +6610,10 @@ object house {
        };
 
      thermal_integrity_level 4;
-     air_temperature 70;
-     mass_temperature 70;
+          initial_temperature_shift random.uniform(-0.5,+0.5);
+     air_temperature ($heating_setpoint+$initial_temperature_shift); 
+     mass_temperature ($heating_setpoint); 
      cooling_COP 4.0;
-     object ZIPload {
-           base_power LIGHTS*1.08;
-           schedule_skew 3600;
-           heatgain_fraction 0.9;
-           power_pf 1.000;
-           current_pf 1.000;
-           impedance_pf 1.000;
-           impedance_fraction 0.300000;
-           current_fraction 0.300000;
-           power_fraction 0.400000;
-     };
 }
 
 object transformer {
@@ -6784,9 +6651,12 @@ object triplex_line {
 
 object triplex_meter {
        name tm_B_1_6321;
+       bill_day 28;
        phases BS;
        nominal_voltage 120;
        groupid House_Meter;
+       bill_mode HOURLY;
+       power_market Market_1;
 }
 
 object house {
@@ -6796,8 +6666,13 @@ object house {
      schedule_skew -1582;
      heating_system_type HEAT_PUMP;
      cooling_system_type HEAT_PUMP;
+     gas_enduses DRYER|RANGE;
        heating_setpoint heating8*1;
-
+#if HEATSET_PROB<${URAND}
+      thermostat_mode OFF;
+#else
+      thermostat_mode HEAT;
+#endif
      object controller {
            schedule_skew -1582;
            market Market_1;
@@ -6819,20 +6694,10 @@ object house {
        };
 
      thermal_integrity_level 6;
-     air_temperature 70;
-     mass_temperature 70;
+          initial_temperature_shift random.uniform(-0.5,+0.5);
+     air_temperature ($heating_setpoint+$initial_temperature_shift); 
+     mass_temperature ($heating_setpoint); 
      cooling_COP 2.6;
-     object ZIPload {
-           base_power LIGHTS*1.33;
-           schedule_skew -1582;
-           heatgain_fraction 0.9;
-           power_pf 1.000;
-           current_pf 1.000;
-           impedance_pf 1.000;
-           impedance_fraction 0.300000;
-           current_fraction 0.300000;
-           power_fraction 0.400000;
-     };
 }
 
 object transformer {
@@ -6870,9 +6735,12 @@ object triplex_line {
 
 object triplex_meter {
        name tm_C_1_6321;
+       bill_day 28;
        phases CS;
        nominal_voltage 120;
        groupid House_Meter;
+       bill_mode HOURLY;
+       power_market Market_1;
 }
 
 object house {
@@ -6882,8 +6750,13 @@ object house {
      schedule_skew -469;
      heating_system_type HEAT_PUMP;
      cooling_system_type HEAT_PUMP;
+     gas_enduses DRYER|RANGE;
      heating_setpoint heating7*1;
-
+#if HEATSET_PROB<${URAND}
+      thermostat_mode OFF;
+#else
+      thermostat_mode HEAT;
+#endif
      object controller {
            schedule_skew -469;
            market Market_1;
@@ -6905,31 +6778,23 @@ object house {
        };
 
      thermal_integrity_level 4;
-     air_temperature 70;
-     mass_temperature 70;
+          initial_temperature_shift random.uniform(-0.5,+0.5);
+     air_temperature ($heating_setpoint+$initial_temperature_shift); 
+     mass_temperature ($heating_setpoint); 
      cooling_COP 3.8;
-     object ZIPload {
-           base_power LIGHTS*1.16;
-           schedule_skew -469;
-           heatgain_fraction 0.9;
-           power_pf 1.000;
-           current_pf 1.000;
-           impedance_pf 1.000;
-           impedance_fraction 0.300000;
-           current_fraction 0.300000;
-           power_fraction 0.400000;
-     };
 }
 
 object billdump {
-     runtime '2000-01-02 00:00:00';
-     filename BillDump_IEEE_13_house_market.csv;
-     group House_Meter;
+     runtime '2020-03-28 00:00:00';
+     filename "output/billdump/BillDump_IEEE_13_house_market.csv";
+     group "House_Meter";
 }
 
 #ifdef VOLTDUMP_ENABLED
 object voltdump {
      filename "output/voltdump/VoltDump_IEEE_13.csv";
-     runtime '2000-01-02 00:00:00';
+#ifdef STARTRECORD
+     runtime ${STARTRECORD};
+#endif //STARTRECORD
 }
 #endif //VOLTDUMP_ENABLED
