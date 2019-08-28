@@ -1,0 +1,4 @@
+#define STARTTIME="2020-01-01 00:00:00 PST"
+#define STOPTIME="2021-01-01 00:00:00 PST"
+#define TIMEZONE="PST+8PDT"
+#define TARIFF="fixed.tariff"
