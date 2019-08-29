@@ -104,7 +104,7 @@ venv.bak/
 .mypy_cache/
 
 .DS_Store
-output/
+output/*.csv
 object_profile.txt
 gridlabd.json
 input/tariff
