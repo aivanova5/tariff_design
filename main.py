@@ -19,6 +19,8 @@ with open(path+'simulation_configuration.csv', newline='') as config_file :
 			fw.write('\n#define STOPTIME=' + str(line[1]).strip(' '))
 		if 'TIMEZONE' in line[0] :
 			fw.write('\n#define TIMEZONE=' + str(line[1]).strip(' '))
+		if 'WEATHER FILE' in line[0] : 
+			fw.write('\n#define WEATHER=' + str(line[1]).strip(' '))
 		if 'TARIFF'==line[0] :
 			fw.write('\n#define TARIFF=' + str(line[1]).strip(' ')+'.tariff')
 			tariff_type = str(line[1]).strip(' ')
