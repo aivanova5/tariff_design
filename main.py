@@ -1,6 +1,7 @@
 import csv 
 import os 
-import gridlabd 
+import gridlabd
+from datetime import date, timedelta
 
 path="config/"
 
@@ -42,7 +43,25 @@ with open(path+'simulation_configuration.csv', newline='') as config_file :
 				print("RUNNING MODEL : " + model_name)
 			else :
 				print("ERROR: model name is invalid - Choose either ieee13 or ieee4")
+		if 'TOU PEAK START HOUR' in line[0] : 
+			if len(line[1].strip(" "))==1 : 
+				tou_start='0'+line[1].strip(" ")
+			elif len(line[1].strip(" "))==2 : 
+				tou_start=line[1].strip(" ")
+		if 'TOU PEAK END HOUR' in line[0] : 
+			if len(line[1].strip(" "))==1 : 
+				tou_end='0'+line[1].strip(" ")
+			elif len(line[1].strip(" "))==2 : 
+				tou_end=line[1].strip(" ")
 fw.close()
+sdate_w1 = date(int(year)-1, 12, 31)   # start date
+edate_w1 = date(int(year), 4,30)   # end date
+sdate_s1 = date(int(year), 5, 1)   # start date
+edate_s1 = date(int(year), 10,31)   # end date
+sdate_w2 = date(int(year), 11, 1)   # start date
+edate_w2 = date(int(year), 12,31)   # end date
+delta_list = [edate_w1 - sdate_w1,  edate_s1- sdate_s1, edate_w2- sdate_w2]  # as timedelta
+s_list = [sdate_w1,sdate_s1,sdate_w2]
 if tariff_type=='fixed' :
 	if os.path.exists("input/tariff/fixed.tariff"):
 		os.remove("input/tariff/fixed.tariff")
@@ -55,15 +74,18 @@ elif tariff_type=='TOU' or tariff_type=='tou':
 	if os.path.exists("input/tariff/tou.tariff"):
 		os.remove("input/tariff/tou.tariff")
 	fw_tou = open("input/tariff/tou.tariff",'w')
-	fw_tou.write(year+'-12-31 22:00:00,' + str(TOU_winter))
-	fw_tou.write('\n+16h,' + str(TOU_winter*TOU_multiplier))
-	fw_tou.write('\n+6h,' + str(TOU_winter))
-	fw_tou.write('\n'+year+'-04-30 22:00:00,' + str(TOU_summer))
-	fw_tou.write('\n+16h,' + str(TOU_summer*TOU_multiplier))
-	fw_tou.write('\n+6h,' + str(TOU_summer))
-	fw_tou.write('\n'+year+'-10-31 22:00:00,' + str(TOU_winter))
-	fw_tou.write('\n+16h,' + str(TOU_winter*TOU_multiplier))
-	fw_tou.write('\n+6h,' + str(TOU_winter))
+
+	for s,delta in enumerate(delta_list) :
+		for i in range(delta.days + 1):
+			day = '\n'+str(s_list[s] + timedelta(days=i))
+			if s==1 : #summer
+				fw_tou.write(day + ' 00:00:00,'+str(TOU_summer))
+				fw_tou.write(day + ' '+tou_start+':00:00,'+str(TOU_summer*TOU_multiplier))
+				fw_tou.write(day + ' '+tou_end+':00:00,'+str(TOU_summer))
+			else :
+				fw_tou.write(day + ' 00:00:00,'+str(TOU_winter))
+				fw_tou.write(day + ' '+tou_start+':00:00,'+str(TOU_winter*TOU_multiplier))
+				fw_tou.write(day + ' '+tou_end+':00:00,'+str(TOU_winter))
 	fw_tou.close()
 # # RUNNING GRIDLABD 
 gridlabd.command(model_name+'/'+model_name+'.glm')
