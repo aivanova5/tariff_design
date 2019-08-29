@@ -5,7 +5,7 @@ import gridlabd
 path="config/"
 
 if os.path.exists(path+"config.glm"):
-	os.remove(path+'config.glm')
+	os.remove(path+"config.glm")
 
 with open(path+'simulation_configuration.csv', newline='') as config_file : 
 	fc = csv.reader(config_file, delimiter=',', quotechar='|')
@@ -24,6 +24,8 @@ with open(path+'simulation_configuration.csv', newline='') as config_file :
 		if 'TARIFF'==line[0] :
 			fw.write('\n#define TARIFF=' + str(line[1]).strip(' ')+'.tariff')
 			tariff_type = str(line[1]).strip(' ')
+		if 'BILL DUMP TIME' in line[0] : 
+			fw.write('\n#define BILLDUMPTIME=' + str(line[1]).strip(' '))
 		if 'FIXED PRICE WINTER' in line[0] : 
 			fixed_winter=line[1].strip(' ')
 		if 'FIXED PRICE SUMMER' in line[0] : 
@@ -49,10 +51,10 @@ if tariff_type=='fixed' :
 	fw_fixed.write('\n'+year+'-05-01 00:00:00,' + fixed_summer)
 	fw_fixed.write('\n'+year+'-11-01 00:00:00,' + fixed_winter)
 	fw_fixed.close()
-elif tariff_type=='TOU' or 'tou': 
-	if os.path.exists("input/tariff/TOU.tariff"):
-		os.remove("input/tariff/TOU.tariff")
-	fw_tou = open("input/tariff/TOU.tariff",'w')
+elif tariff_type=='TOU' or tariff_type=='tou': 
+	if os.path.exists("input/tariff/tou.tariff"):
+		os.remove("input/tariff/tou.tariff")
+	fw_tou = open("input/tariff/tou.tariff",'w')
 	fw_tou.write(year+'-12-31 22:00:00,' + str(TOU_winter))
 	fw_tou.write('\n+16h,' + str(TOU_winter*TOU_multiplier))
 	fw_tou.write('\n+6h,' + str(TOU_winter))
