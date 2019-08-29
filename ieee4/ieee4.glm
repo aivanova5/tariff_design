@@ -11,7 +11,10 @@ module powerflow {
 }
 module market;
 module tape;
-module residential;
+module residential {
+  implicit_enduses REFRIGERATOR|LIGHTS|PLUGS|WATERHEATER|RANGE|DRYER|CLOTHESWASHER|FREEZER|MICROWAVE|DISHWASHER;
+  implicit_enduse_source EIA2015;
+}
 module climate;
 
 schedule waterdemand {
@@ -373,6 +376,7 @@ object house {
      heating_system_type HEAT_PUMP;
      heating_COP 2.7;
      cooling_system_type ELECTRIC;
+     gas_enduses DRYER|RANGE;
      object controller {
            schedule_skew 2754;
            market Market_1;
