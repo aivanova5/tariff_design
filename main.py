@@ -13,11 +13,13 @@ with open(path+'simulation_configuration.csv', newline='') as config_file :
 	fw = open(path+'config.glm', 'w')
 	fw.write('// Generated config.glm based on config/simulation_configuration.csv')
 	for line in fc : 
+		# if not line : 
+		# 	continue
 		if 'SIMULATION START TIME' in line[0] :
-			fw.write('\n#define STARTTIME=' + str(line[1]).strip(' '))
+			fw.write('\n#define STARTTIME="' + str(line[1]).strip(' ')+'"')
 			year = line[1].strip(' ')[0:4]
 		if 'SIMULATION STOP TIME' in line[0] :
-			fw.write('\n#define STOPTIME=' + str(line[1]).strip(' '))
+			fw.write('\n#define STOPTIME="' + str(line[1]).strip(' ')+'"')
 		if 'TIMEZONE' in line[0] :
 			fw.write('\n#define TIMEZONE=' + str(line[1]).strip(' '))
 		if 'WEATHER FILE' in line[0] : 
@@ -100,3 +102,4 @@ elif tariff_type=='TOU' or tariff_type=='tou':
 # # RUNNING GRIDLABD 
 gridlabd.command(model_name+'/'+model_name+'.glm')
 gridlabd.start('wait')
+quit()

@@ -1,7 +1,14 @@
-
+#include "config/default.glm"
+#ifexist "config/config.glm"
 #include "config/config.glm"
+#else 
+#print Warning using default configuration
+#endif //config.glm
+
+//#print ${STARTTIME}
+#print ${STOPTIME}
 clock {
-	timezone ${TIMEZONE};
+	timezone "${TIMEZONE}";
 	timestamp ${STARTTIME};
 	stoptime ${STOPTIME};	
 }
